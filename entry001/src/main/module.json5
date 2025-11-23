@@ -1,0 +1,76 @@
+{
+  "module": {
+    "name": "entry001",
+    "type": "entry",
+    "description": "$string:module_desc",
+    "mainElement": "Entry001Ability",
+    "deviceTypes": [
+      "phone",
+      "tablet"
+    ],
+    // "requestPermissions": [
+    //   {
+    //     "name": "ohos.permission.READ_IMAGEVIDEO",
+    //     "reason": "$string:perm_read_image_desc",
+    //     "usedScene": { "abilities": ["Entry001Ability"], "when": "inuse" }
+    //   },
+    //   {
+    //     "name": "ohos.permission.WRITE_IMAGEVIDEO",
+    //     "reason": "$string:perm_write_image_desc",
+    //     "usedScene": { "abilities": ["Entry001Ability"], "when": "inuse" }
+    //   }
+    // ],
+    "deliveryWithInstall": true,
+    "installationFree": false,
+    "pages": "$profile:main_pages",
+    "abilities": [
+      {
+        "name": "Entry001Ability",
+        "srcEntry": "./ets/entry001ability/Entry001Ability.ets",
+        "description": "$string:Entry001Ability_desc",
+        "icon": "$media:layered_image",
+        "label": "$string:Entry001Ability_label",
+        "startWindowIcon": "$media:startIcon",
+        "startWindowBackground": "$color:start_window_background",
+        "exported": true,
+        "skills": [
+          {
+            "entities": [
+              "entity.system.home"
+            ],
+            "actions": [
+              "ohos.want.action.home"
+            ]
+          }
+        ]
+      }
+    ],
+    "extensionAbilities": [
+      {
+        "name": "Entry001BackupAbility",
+        "srcEntry": "./ets/entry001backupability/Entry001BackupAbility.ets",
+        "type": "backup",
+        "exported": false,
+        "metadata": [
+          {
+            "name": "ohos.extension.backup",
+            "resource": "$profile:backup_config"
+          }
+        ]
+      },
+      {
+        "name": "Entry001FormAbility",
+        "srcEntry": "./ets/entry001formability/Entry001FormAbility.ets",
+        "label": "$string:Entry001FormAbility_label",
+        "description": "$string:Entry001FormAbility_desc",
+        "type": "form",
+        "metadata": [
+          {
+            "name": "ohos.extension.form",
+            "resource": "$profile:form_config"
+          }
+        ]
+      }
+    ]
+  }
+}

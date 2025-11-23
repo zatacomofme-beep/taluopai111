@@ -1,0 +1,48 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "module description"
+    },
+    {
+      "name": "Entry001Ability_desc",
+      "value": "description"
+    },
+    {
+      "name": "Entry001Ability_label",
+      "value": "label"
+    },
+    {
+      "name": "Entry001FormAbility_desc",
+      "value": "form_description"
+    },
+    {
+      "name": "Entry001FormAbility_label",
+      "value": "form_label"
+    },
+    {
+      "name": "DailyCard_desc",
+      "value": "This is a service widget."
+    },
+    {
+      "name": "DailyCard_display_name",
+      "value": "DailyCard"
+    },
+    {
+      "name": "card_title",
+      "value": "Title"
+    },
+    {
+      "name": "introduction",
+      "value": "Introduction"
+    },
+    {
+      "name": "perm_read_image_desc",
+      "value": "用于读取相册中的图片以完成分享和保存"
+    },
+    {
+      "name": "perm_write_image_desc",
+      "value": "用于将生成的海报保存到系统相册"
+    }
+  ]
+}
