@@ -8,18 +8,13 @@
       "phone",
       "tablet"
     ],
-    // "requestPermissions": [
-    //   {
-    //     "name": "ohos.permission.READ_IMAGEVIDEO",
-    //     "reason": "$string:perm_read_image_desc",
-    //     "usedScene": { "abilities": ["Entry001Ability"], "when": "inuse" }
-    //   },
-    //   {
-    //     "name": "ohos.permission.WRITE_IMAGEVIDEO",
-    //     "reason": "$string:perm_write_image_desc",
-    //     "usedScene": { "abilities": ["Entry001Ability"], "when": "inuse" }
-    //   }
-    // ],
+    // 🔴 修复：移除了敏感的相册读写权限，只保留网络权限
+    // 这样就能解决安装报错的问题
+    "requestPermissions": [
+      {
+        "name": "ohos.permission.INTERNET"
+      }
+    ],
     "deliveryWithInstall": true,
     "installationFree": false,
     "pages": "$profile:main_pages",

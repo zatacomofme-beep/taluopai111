@@ -1,6 +1,3 @@
-// 路径: ets/pages/SpreadPage.ets
-// V11.0 商业化适配版：展示心力值，调用 AI 时传入类型
-
 import router from '@ohos.router';
 import common from '@ohos.app.ability.common';
 import { FortuneManager } from '../common/FortuneManager';
@@ -9,7 +6,7 @@ import curves from '@ohos.curves';
 import promptAction from '@ohos.promptAction';
 import { BusinessError } from '@kit.BasicServicesKit';
 import { AIService, ChatMessage } from '../common/AIService';
-import { EnergyManager } from '../common/EnergyManager'; // 导入能量管理
+import { EnergyManager } from '../common/EnergyManager';
 
 @Entry
 @Component
@@ -36,7 +33,7 @@ struct SpreadPage {
   @State isAnalyzing: boolean = false;
   @State chatHistory: ChatMessage[] = [];
   @State inputText: string = "";
-  @State currentEnergy: number = 0; // 当前心力值
+  @State currentEnergy: number = 0;
 
   private listScroller: Scroller = new Scroller();
   private manager = FortuneManager.getInstance();
@@ -46,7 +43,6 @@ struct SpreadPage {
 
   async aboutToAppear() {
     this.cards = this.manager.drawThreeSpread();
-    // 初始化能量管理器
     await this.energyManager.init(this.context);
     this.currentEnergy = this.energyManager.getEnergy();
   }
@@ -101,27 +97,31 @@ struct SpreadPage {
     }, 400);
   }
 
+  // 🚀 关键修改：获取心情并传给 AI
   async handleAIAnalyze() {
     this.isSheetOpen = true;
-    // 刷新一下能量显示
     this.currentEnergy = this.energyManager.getEnergy();
 
     if (this.chatHistory.length > 0) return;
     this.isAnalyzing = true;
 
-    const initialPrompt = AIService.createInitialPrompt(this.cards);
+    // 1. 获取今日心情
+    const todayMood = await this.manager.getTodayMood();
+
+    // 2. 生成包含心情的 Prompt
+    const initialPrompt = AIService.createInitialPrompt(this.cards, todayMood);
+
     const userMsg: ChatMessage = { role: 'user', content: initialPrompt };
     this.chatHistory.push(userMsg);
     const aiMsg: ChatMessage = { role: 'assistant', content: '' };
     this.chatHistory.push(aiMsg);
 
     const requestHistory = [userMsg];
-    // 标记为首次深度分析，扣费不同
+
+    // 3. 发送请求
     const resultText = await AIService.requestChat(requestHistory, this.context, true);
 
-    // 再次刷新能量 (扣费后)
     this.currentEnergy = this.energyManager.getEnergy();
-
     this.isAnalyzing = false;
     this.typewriterEffect(resultText, this.chatHistory.length - 1);
   }
@@ -137,12 +137,9 @@ struct SpreadPage {
     const aiMsgIndex = this.chatHistory.length - 1;
     const requestHistory = this.chatHistory.slice(0, aiMsgIndex);
 
-    // 普通对话扣费
     const resultText = await AIService.requestChat(requestHistory, this.context, false);
 
-    // 刷新能量
     this.currentEnergy = this.energyManager.getEnergy();
-
     this.isAnalyzing = false;
     this.chatHistory[aiMsgIndex].content = "";
     this.typewriterEffect(resultText, aiMsgIndex);
@@ -174,7 +171,6 @@ struct SpreadPage {
           }
         }
 
-        // 显示心力值
         Row() {
           Text('⚡').fontSize(14)
           Text(`${this.currentEnergy}`).fontSize(14).fontColor('#FF69B4').fontWeight(FontWeight.Bold).margin({left: 2})
@@ -194,7 +190,9 @@ struct SpreadPage {
               Row() {
                 if (msg.role === 'user') {
                   Blank()
-                  Text(msg.content).fontSize(15).fontColor(Color.White).backgroundColor('#FFB6C1').padding(12)
+                  // 这里可以优化显示，不要把完整的 Prompt 显示出来，只显示“开始解读...”
+                  Text(msg.content.startsWith('【用户当前状态】') ? '🔮 开始深度解读...' : msg.content)
+                    .fontSize(15).fontColor(Color.White).backgroundColor('#FFB6C1').padding(12)
                     .borderRadius({ topLeft: 15, topRight: 5, bottomLeft: 15, bottomRight: 15 }).margin({ left: 40 })
                 } else {
                   Image($rawfile('card_back.png')).width(30).height(30).borderRadius(15).margin({ right: 8 })
@@ -211,7 +209,7 @@ struct SpreadPage {
         TextInput({ text: this.inputText, placeholder: this.currentEnergy >= 2 ? '每次提问消耗 2 心力...' : '心力不足，明日再来...' })
           .layoutWeight(1).height(40).backgroundColor('#F5F5F5')
           .borderRadius(20).padding({ left: 15 }).onChange((value) => { this.inputText = value; }).onSubmit(() => this.handleSendMessage())
-          .enabled(this.currentEnergy >= 2) // 没钱禁用输入框
+          .enabled(this.currentEnergy >= 2)
 
         Button("发送").width(70).height(40).backgroundColor(this.currentEnergy >= 2 ? '#FF69B4' : '#CCCCCC').fontColor(Color.White).margin({ left: 10 })
           .borderRadius(20).onClick(() => this.handleSendMessage()).opacity(this.isAnalyzing ? 0.5 : 1)

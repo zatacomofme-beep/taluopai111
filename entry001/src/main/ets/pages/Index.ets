@@ -12,6 +12,7 @@ import { BottomNavBar } from '../common/BottomNavBar';
 import { ImageSaver } from '../common/ImageSaver';
 import { EnergyManager } from '../common/EnergyManager';
 import { ShareHelper } from '../common/ShareHelper';
+import { CloudService } from '../common/CloudService';
 
 @Entry
 @Component
@@ -61,7 +62,7 @@ struct Index {
   @State glowOpacity: number = 0;
   @State starScale: number = 0;
 
-  // === 🏛️ 弹窗状态控制 (不再依赖 bindSheet) ===
+  // === 🏛️ 弹窗状态控制 ===
   @State isGallerySheetOpen: boolean = false;
   @State isEnergySheetOpen: boolean = false;
   @State isShareSheetOpen: boolean = false;
@@ -94,7 +95,6 @@ struct Index {
   private energyManager = EnergyManager.getInstance();
   private context = getContext(this) as common.UIAbilityContext;
   private POSTER_ID = 'poster_component_id';
-  private breathingTimerId: number | null = null;
 
   private asyncAnimateTo(duration: number, curve: Curve | string | ICurve, updateFn: () => void): Promise<void> {
     return new Promise((resolve) => {
@@ -110,9 +110,12 @@ struct Index {
     this.checkState();
     this.initDate();
     this.startGuideAnimation();
+
+    // 获取今日心情数据，用于判断是否显示“去记录”按钮
     const mood = await this.manager.getTodayMood();
     this.moodIndex = mood.mood;
     this.moodNote = mood.note;
+
     const aff = await this.manager.getTodayAffirmations();
     this.goldQuote = aff.quote;
     this.dailyTask = aff.task;
@@ -121,6 +124,11 @@ struct Index {
 
   onPageShow() {
     this.refreshEnergy();
+    // 每次页面显示都刷新一下心情状态，防止从心情页回来没更新
+    void (async () => {
+      const mood = await this.manager.getTodayMood();
+      this.moodIndex = mood.mood;
+    })();
   }
 
   refreshEnergy() {
@@ -406,15 +414,10 @@ struct Index {
   openBreathingGuide() { this.isBreathingSheetOpen = true; }
 
   async loadGalleryData() {
-    // 关闭其他窗口
     this.isShareSheetOpen = false;
     this.isEnergySheetOpen = false;
-
-    // 加载数据
     this.galleryList = await this.manager.getGallery();
     this.collectionProgress = Math.round((this.galleryList.length / TAROT_DECK.length) * 100);
-
-    // 开启展览厅 (手动控制)
     animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
       this.isGallerySheetOpen = true;
     });
@@ -429,7 +432,55 @@ struct Index {
   getThemePrimaryTextColor(): string { return this.shareTheme === 'star' ? '#EEEEEE' : '#333333'; }
   getThemeSecondaryTextColor(): string { return this.shareTheme === 'star' ? '#BBBBBB' : '#888888'; }
 
-  // === 🎨 手动构建的弹窗内容 ===
+  async handleCloudSync() {
+    const mockUserId = "user_001";
+    const mockToken = "token_test";
+    promptAction.showToast({ message: '正在连接服务器...', duration: 1000 });
+    const isOnline = await CloudService.checkConnection();
+    const statusEmoji = isOnline ? '🟢' : '🔴';
+    const statusText = isOnline ? '服务器在线' : '服务器连接失败';
+
+    promptAction.showDialog({
+      title: `☁️ 云端同步 (${statusEmoji} ${statusText})`,
+      message: isOnline
+        ? '请选择操作：\n• 上传：将当前手机的数据备份到云端\n• 下载：从云端覆盖本机数据'
+        : '⚠️ 无法连接到云服务器，请检查网络或联系管理员。',
+      buttons: [
+        { text: '⬆️ 上传备份', color: isOnline ? '#007DFF' : '#CCCCCC' },
+        { text: '⬇️ 下载恢复', color: isOnline ? '#007DFF' : '#CCCCCC' },
+        { text: '取消', color: '#999999' }
+      ]
+    }, async (err, data) => {
+      if (err || data.index === 2 || !isOnline) return;
+
+      if (data.index === 0) {
+        promptAction.showToast({ message: '正在上传备份...', duration: 2000 });
+        const allData = await this.manager.exportAllData();
+        const success = await CloudService.backupData(mockUserId, mockToken, allData);
+        if (success) {
+          promptAction.showToast({ message: '✅ 备份成功！' });
+        } else {
+          promptAction.showToast({ message: '❌ 备份失败' });
+        }
+      } else {
+        promptAction.showToast({ message: '正在下载恢复...', duration: 2000 });
+        const jsonStr = await CloudService.restoreData(mockUserId, mockToken);
+        if (jsonStr) {
+          const ok = await this.manager.importData(jsonStr);
+          if (ok) {
+            promptAction.showToast({ message: '✅ 恢复成功，即将刷新...' });
+            this.checkState();
+            this.initDate();
+          } else {
+            promptAction.showToast({ message: '⚠️ 数据解析失败' });
+          }
+        } else {
+          promptAction.showToast({ message: '❌ 未找到云端备份或下载失败' });
+        }
+      }
+    });
+  }
+
   @Builder GallerySheetBuilder() {
     Column() {
       Row() {
@@ -466,10 +517,7 @@ struct Index {
         })
       }.columnsTemplate('1fr 1fr 1fr').columnsGap(12).rowsGap(20).padding({ left: 20, right: 20, top: 20, bottom: 80 }).layoutWeight(1)
     }
-    .width('100%')
-    .height('85%') // 模拟 SheetSize.LARGE
-    .backgroundColor(Color.White)
-    .borderRadius({ topLeft: 24, topRight: 24 })
+    .width('100%').height('85%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
   }
 
   @Builder EnergySheetBuilder() {
@@ -496,10 +544,7 @@ struct Index {
         Button("¥ 6.00").backgroundColor('#FFF0F5').fontColor('#FF69B4').height(32).fontSize(12).onClick(() => this.handleRecharge(100))
       }.width('90%').padding(16).backgroundColor('#FAFAFA').borderRadius(16)
     }
-    .width('100%')
-    .height('50%') // 模拟 SheetSize.MEDIUM
-    .backgroundColor(Color.White)
-    .borderRadius({ topLeft: 24, topRight: 24 })
+    .width('100%').height('50%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
   }
 
   @Builder ShareSheetBuilder() {
@@ -572,6 +617,13 @@ struct Index {
               Text("DAILY TAROT").fontSize(12).fontWeight(FontWeight.Bold).fontColor('#CCCCCC').letterSpacing(2)
             }
             Blank()
+
+            // 3. 添加云同步按钮
+            Button({ type: ButtonType.Circle }) { Text('☁️').fontSize(16) }
+            .width(36).height(36).backgroundColor('rgba(255,255,255,0.8)')
+            .margin({ right: 12 })
+            .onClick(() => this.handleCloudSync())
+
             // 心力值入口
             Row() {
               Text('⚡').fontSize(14)
@@ -588,11 +640,9 @@ struct Index {
 
           // === 3D 卡牌与特效容器 ===
           Stack() {
-            // 1. 底层光晕
             Circle({ width: 260, height: 260 }).fill('#FFFFFF').opacity(0.5)
               .scale({ x: this.mysteryScale, y: this.mysteryScale }).blur(40)
 
-            // 2. SSR 爆发光环
             if (this.rarityLevel >= 5) {
               Circle({ width: 200, height: 200 })
                 .fill(this.rarityColor)
@@ -601,24 +651,20 @@ struct Index {
                 .blur(20)
             }
 
-            // 3. 装饰性牌堆
             Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
               .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset1 }).rotate({ z: 1, angle: this.deckAngle1 }).opacity(this.deckOpacity)
             Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
               .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset2 }).rotate({ z: 1, angle: this.deckAngle2 }).opacity(this.deckOpacity)
 
-            // 4. 主卡牌 (背面)
             Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
               .rotate({ x: 0, y: 1, z: 0, angle: this.angle }).opacity(this.angle < 90 ? 1 : 0)
 
-            // 5. 主卡牌 (正面)
             if (this.currentCard) {
               Image($rawfile(this.currentCard.image))
                 .width('100%').height('100%').borderRadius(16)
                 .rotate({ x: 0, y: 1, z: 0, angle: this.angle - 180 }).opacity(this.angle >= 90 ? 1 : 0)
             }
 
-            // 6. SSR 前景星星
             if (this.currentCard && this.rarityLevel >= 6 && this.isFlipped) {
               Text("✨").fontSize(40).position({x: -20, y: -20})
                 .scale({x: this.starScale, y: this.starScale})
@@ -637,7 +683,6 @@ struct Index {
           .shadow({ radius: this.shadowRadius, color: this.shadowColor, offsetY: this.shadowOffsetY })
           .onClick(() => { this.handleDrawCard(); })
 
-          // 结果与按钮
           if (this.showResultText && this.currentCard) {
             Column() {
               Text(this.currentCard.name).fontSize(24).fontWeight(FontWeight.Bold).fontColor('#333333').margin({bottom: 4})
@@ -646,10 +691,25 @@ struct Index {
               Divider().color('#F0F0F0').width('80%').margin({top: 24, bottom: 24})
               Row({ space: 12 }) {
                 Button("✨ 分享").backgroundColor('#333333').fontColor(Color.White).height(44).layoutWeight(1).borderRadius(22).onClick(() => this.handleShare())
-                Button("🔮 三牌阵").backgroundColor('#E0F7FA').fontColor('#006064').height(44).layoutWeight(1).borderRadius(22).onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
+                // 🔴 修改：在这里添加了深度解读按钮
+                Button("🔮 深度解读").backgroundColor('#E0F7FA').fontColor('#006064').height(44).layoutWeight(1).borderRadius(22).onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
               }.width('90%').margin({ bottom: 12 })
-              // 充值入口
-              Button("⚡ 补充心力").backgroundColor('#FFF0F5').fontColor('#FF69B4').height(44).width('90%').borderRadius(22).onClick(() => this.handleBuyVip())
+
+              // 🔴 修改：如果今天还没记心情，显示这个按钮
+              if (this.moodIndex === -1) {
+                Button("📝 记录此刻心情")
+                  .backgroundColor('#FFF0F5')
+                  .fontColor('#FF69B4')
+                  .height(44)
+                  .width('90%')
+                  .borderRadius(22)
+                  .margin({ bottom: 12 })
+                  .onClick(() => router.pushUrl({ url: 'pages/MoodPage' }))
+              }
+
+              Button("⚡ 补充心力").backgroundColor(this.moodIndex === -1 ? '#FFFFFF' : '#FFF0F5').fontColor('#FF69B4').height(44).width('90%').borderRadius(22)
+                .border(this.moodIndex === -1 ? { width: 1, color: '#FF69B4' } : { width: 0 })
+                .onClick(() => this.handleBuyVip())
             }
             .width('92%').backgroundColor('rgba(255,255,255,0.8)').backdropBlur(10).borderRadius(24).padding({ top: 30, bottom: 20 })
             .shadow({ radius: 20, color: 'rgba(0,0,0,0.04)', offsetY: 5 })
@@ -664,102 +724,55 @@ struct Index {
 
       BottomNavBar({ current: 'index' })
 
-      // 🚀 手写弹窗逻辑：展览厅
       if (this.isGallerySheetOpen) {
         Column() {
-          // 遮罩层
           Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor('rgba(0,0,0,0.4)')
-            .onClick(() => {
-              animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
-                this.isGallerySheetOpen = false;
-              });
-            })
-            // 🟢 修复：去掉 type: TransitionType.Opacity，直接写 opacity: 0
+            .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => { animateTo({ duration: 300, curve: Curve.EaseOut }, () => { this.isGallerySheetOpen = false; }); })
             .transition({ opacity: 0 })
             .zIndex(100)
-
-          // 弹窗内容层
-          Column() {
-            this.GallerySheetBuilder()
-          }
+          Column() { this.GallerySheetBuilder() }
           .width('100%')
           .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
-          .zIndex(101)
-          .position({ y: '15%' }) // 模拟 SheetSize.LARGE 效果
-          .constraintSize({ maxWidth: 480 }) // 适配大屏
-        }
-        .width('100%')
-        .height('100%')
-        .zIndex(200)
+          .zIndex(101).position({ y: '15%' }).constraintSize({ maxWidth: 480 })
+        }.width('100%').height('100%').zIndex(200)
       }
 
-      // 🚀 手写弹窗逻辑：能量充值
       if (this.isEnergySheetOpen) {
         Column() {
           Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor('rgba(0,0,0,0.4)')
-            .onClick(() => {
-              animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
-                this.isEnergySheetOpen = false;
-              });
-            })
-            // 🟢 修复：去掉 type: TransitionType.Opacity
+            .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => { animateTo({ duration: 300, curve: Curve.EaseOut }, () => { this.isEnergySheetOpen = false; }); })
             .transition({ opacity: 0 })
             .zIndex(100)
-
-          Column() {
-            this.EnergySheetBuilder()
-          }
+          Column() { this.EnergySheetBuilder() }
           .width('100%')
           .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
-          .zIndex(101)
-          .position({ y: '50%' }) // 模拟 SheetSize.MEDIUM 效果
-          .constraintSize({ maxWidth: 480 }) // 适配大屏
-        }
-        .width('100%')
-        .height('100%')
-        .zIndex(200)
+          .zIndex(101).position({ y: '50%' }).constraintSize({ maxWidth: 480 })
+        }.width('100%').height('100%').zIndex(200)
       }
 
-      // 🚀 手写弹窗逻辑：分享
+      // 🚀 修复后的分享弹窗：去除了上传云端功能，只保留保存相册和分享
       if (this.isShareSheetOpen) {
         Column() {
           Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor('rgba(0,0,0,0.4)')
-            .onClick(() => {
-              animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
-                this.isShareSheetOpen = false;
-              });
-            })
-            // 🟢 修复：去掉 type: TransitionType.Opacity
+            .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => { animateTo({ duration: 300, curve: Curve.EaseOut }, () => { this.isShareSheetOpen = false; }); })
             .transition({ opacity: 0 })
             .zIndex(100)
 
           Column() {
             this.ShareSheetBuilder()
+            // 🔴 修改：移除了“上传云相册”按钮
             Row({ space: 16 }) {
-              Button('保存相册').backgroundColor('#F5F5F5').fontColor('#333').layoutWeight(1).height(48).borderRadius(24).onClick(() => this.executeSave())
-              Button('发送给好友').backgroundColor('#333').fontColor('#FFF').layoutWeight(1).height(48).borderRadius(24).onClick(() => this.handleSystemShare())
+              Button('保存相册').backgroundColor('#F5F5F5').fontColor('#333').layoutWeight(1).height(48).borderRadius(24).fontSize(14).onClick(() => this.executeSave())
+              Button('发送给好友').backgroundColor('#333').fontColor('#FFF').layoutWeight(1).height(48).borderRadius(24).fontSize(14).onClick(() => this.handleSystemShare())
             }.width('90%').margin({ top: 20, bottom: 30 })
           }
-          .width('100%')
-          .backgroundColor(Color.White)
-          .borderRadius({ topLeft: 24, topRight: 24 })
+          .width('100%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
           .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
-          .zIndex(101)
-          .position({ y: '30%' }) // 自定义高度
-          .constraintSize({ maxWidth: 480 }) // 适配大屏
-        }
-        .width('100%')
-        .height('100%')
-        .zIndex(200)
+          .zIndex(101).position({ y: '30%' }).constraintSize({ maxWidth: 480 })
+        }.width('100%').height('100%').zIndex(200)
       }
     }
     .width('100%').height('100%')
