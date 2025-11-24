@@ -1,10 +1,12 @@
 {
   "app": {
-    "bundleName": "com.example.myapplication1",
+    // 修改包名为我们确定的名字
+    "bundleName": "com.dreambook.healing",
     "vendor": "example",
     "versionCode": 1000000,
     "versionName": "1.0.0",
     "icon": "$media:layered_image",
+    // 🔴 重点：将 "MyApplication1" 修改为资源引用 "$string:app_name"
     "label": "$string:app_name"
   }
 }
