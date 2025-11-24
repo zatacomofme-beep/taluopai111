@@ -10,6 +10,8 @@ import { promptAction, curves, router, componentSnapshot } from '@kit.ArkUI';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { BottomNavBar } from '../common/BottomNavBar';
 import { ImageSaver } from '../common/ImageSaver';
+import { EnergyManager } from '../common/EnergyManager';
+import { ShareHelper } from '../common/ShareHelper';
 
 @Entry
 @Component
@@ -54,13 +56,19 @@ struct Index {
   @State deckAngle1: number = -5;
   @State deckAngle2: number = 5;
 
-  // === 🏛️ 展览厅与数据 ===
+  // === 🌈 特效变量 ===
+  @State glowScale: number = 1;
+  @State glowOpacity: number = 0;
+  @State starScale: number = 0;
+
+  // === 🏛️ 弹窗状态控制 (不再依赖 bindSheet) ===
   @State isGallerySheetOpen: boolean = false;
+  @State isEnergySheetOpen: boolean = false;
+  @State isShareSheetOpen: boolean = false;
+
+  // === 数据 ===
   @State galleryList: CardRecord[] = [];
   @State collectionProgress: number = 0;
-
-  // === 分享与功能 ===
-  @State isShareSheetOpen: boolean = false;
   @State isPosterReady: boolean = false;
   @State shareTheme: string = 'soft';
   @State stickers: string[] = [];
@@ -79,7 +87,11 @@ struct Index {
   @State breathingRemaining: number = 60;
   @State privacyMode: boolean = false;
 
+  // === ⚡ 能量显示与充值 ===
+  @State currentEnergy: number = 0;
+
   private manager = FortuneManager.getInstance();
+  private energyManager = EnergyManager.getInstance();
   private context = getContext(this) as common.UIAbilityContext;
   private POSTER_ID = 'poster_component_id';
   private breathingTimerId: number | null = null;
@@ -92,6 +104,9 @@ struct Index {
 
   async aboutToAppear() {
     await this.manager.init(this.context);
+    await this.energyManager.init(this.context);
+    this.refreshEnergy();
+
     this.checkState();
     this.initDate();
     this.startGuideAnimation();
@@ -102,6 +117,14 @@ struct Index {
     this.goldQuote = aff.quote;
     this.dailyTask = aff.task;
     this.privacyMode = await this.manager.isPrivacyMode();
+  }
+
+  onPageShow() {
+    this.refreshEnergy();
+  }
+
+  refreshEnergy() {
+    this.currentEnergy = this.energyManager.getEnergy();
   }
 
   initDate() {
@@ -170,6 +193,22 @@ struct Index {
   handleManualReset() {
     this.resetUI();
     promptAction.showToast({ message: '🔄 已重置', duration: 1000 });
+  }
+
+  // === 充值相关 ===
+  handleBuyVip() {
+    animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+      this.isEnergySheetOpen = true;
+    });
+  }
+
+  async handleRecharge(amount: number) {
+    await this.energyManager.recharge(amount);
+    this.refreshEnergy();
+    promptAction.showToast({ message: `⚡ 成功补充 ${amount} 点心力！` });
+    animateTo({ duration: 300 }, () => {
+      this.isEnergySheetOpen = false;
+    });
   }
 
   // === 🌈 珍稀度计算逻辑 ===
@@ -271,7 +310,24 @@ struct Index {
       this.deckOffset2 = 300;
     });
 
-    await this.asyncAnimateTo(this.getFlipDurationByRarity(), curves.springMotion(0.6, 0.8), () => {
+    const flipDuration = this.getFlipDurationByRarity();
+
+    if (this.rarityLevel >= 5) {
+      setTimeout(() => {
+        this.glowScale = 0.8;
+        this.glowOpacity = 1;
+        animateTo({ duration: 800, curve: Curve.EaseOut }, () => {
+          this.glowScale = 2.5;
+          this.glowOpacity = 0;
+        });
+        this.starScale = 0;
+        animateTo({ duration: 600, curve: curves.springMotion(0.6, 0.8) }, () => {
+          this.starScale = 1.2;
+        });
+      }, flipDuration / 3);
+    }
+
+    await this.asyncAnimateTo(flipDuration, curves.springMotion(0.6, 0.8), () => {
       this.angle = 180;
       this.mainScale = 1.0;
       this.floatOffsetY = 0;
@@ -294,44 +350,25 @@ struct Index {
       await this.manager.setTodayAffirmations(this.goldQuote, this.dailyTask);
       this.updateForm(this.currentCard);
     }
+
     animateTo({ duration: 600 }, () => { this.showResultText = true; });
   }
 
-  // === 分享与保存 ===
   handleShare() {
     if (!this.currentCard) return;
     this.isShareSheetOpen = false;
     this.isGallerySheetOpen = false;
     this.isPosterReady = false;
-    setTimeout(() => { this.isShareSheetOpen = true; }, 60);
+    animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+      this.isShareSheetOpen = true;
+    });
     setTimeout(() => { this.isPosterReady = true; }, 140);
   }
 
   async handleSystemShare() {
     try {
       promptAction.showToast({ message: '正在生成...', duration: 1000 });
-      const pixelMap = await componentSnapshot.get(this.POSTER_ID);
-      const fileName = `tarot_share_${new Date().getTime()}.jpg`;
-      const filePath = `${this.context.cacheDir}/${fileName}`;
-      const imagePacker = image.createImagePacker();
-      const packOpts: image.PackingOption = { format: 'image/jpeg', quality: 90 };
-      const data = await imagePacker.packing(pixelMap, packOpts);
-      const file = fs.openSync(filePath, fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE);
-      fs.writeSync(file.fd, data);
-      fs.closeSync(file);
-      const utdTypeId = utd.getUniformDataTypeByFilenameExtension('.jpg', utd.UniformDataType.IMAGE);
-      const shareData = new systemShare.SharedData({
-        utd: utdTypeId,
-        uri: fileUri.getUriFromPath(filePath),
-        title: '治愈之书 · 今日指引',
-        description: '快来看看我的塔罗牌运势吧！',
-        thumbnail: new Uint8Array(data)
-      });
-      const controller = new systemShare.ShareController(shareData);
-      await controller.show(this.context, {
-        selectionMode: systemShare.SelectionMode.SINGLE,
-        previewMode: systemShare.SharePreviewMode.DEFAULT
-      });
+      await ShareHelper.snapshotAndShare(this.context, this.POSTER_ID);
     } catch (err) {
       promptAction.showToast({ message: '分享失败，请重试', duration: 2000 });
     }
@@ -355,36 +392,32 @@ struct Index {
     } catch { return false; }
   }
 
-  // === 功能跳转 ===
   async setMood(index: number) {
     this.moodIndex = index;
     await this.manager.setTodayMood(index, this.moodNote);
     promptAction.showToast({ message: '✨ 心情已记录', duration: 1200 });
   }
-  handleBuyVip() {
-    AlertDialog.show({
-      title: '✨ 解锁深度疗愈',
-      message: '解锁「时光流·三牌阵」与 AI 深度分析功能。\n\n价格：¥29.00',
-      secondaryButton: {
-        value: '解锁', fontColor: '#FF69B4',
-        action: async () => { await this.manager.setVipStatus(true); this.isVip = true; promptAction.showToast({ message: '🎉 解锁成功！' }); }
-      }
-    });
-  }
+
   togglePrivacyMode() {
     this.privacyMode = !this.privacyMode;
     this.manager.setPrivacyMode(this.privacyMode);
     promptAction.showToast({ message: this.privacyMode ? '🔒 私密模式已开启' : '🔓 私密模式已关闭' });
   }
-  openBreathingGuide() { this.isBreathingSheetOpen = true; this.startBreathingGuide(60); }
-  startBreathingGuide(seconds: number) { /* 简单实现，复杂版在BreathingPage */ this.breathingRemaining = seconds; }
-  stopBreathingGuide() { this.isBreathingSheetOpen = false; }
+  openBreathingGuide() { this.isBreathingSheetOpen = true; }
 
   async loadGalleryData() {
+    // 关闭其他窗口
     this.isShareSheetOpen = false;
+    this.isEnergySheetOpen = false;
+
+    // 加载数据
     this.galleryList = await this.manager.getGallery();
     this.collectionProgress = Math.round((this.galleryList.length / TAROT_DECK.length) * 100);
-    this.isGallerySheetOpen = true;
+
+    // 开启展览厅 (手动控制)
+    animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+      this.isGallerySheetOpen = true;
+    });
   }
   isCollected(id: number): boolean { return this.galleryList.some(record => record.cardId === id); }
 
@@ -396,7 +429,78 @@ struct Index {
   getThemePrimaryTextColor(): string { return this.shareTheme === 'star' ? '#EEEEEE' : '#333333'; }
   getThemeSecondaryTextColor(): string { return this.shareTheme === 'star' ? '#BBBBBB' : '#888888'; }
 
-  // === 🎨 Builder 构建器 ===
+  // === 🎨 手动构建的弹窗内容 ===
+  @Builder GallerySheetBuilder() {
+    Column() {
+      Row() {
+        Column() {
+          Text("治愈展览厅").fontSize(24).fontWeight(FontWeight.Bold).fontColor('#333333')
+          Text(`已收集 ${this.galleryList.length} / ${TAROT_DECK.length} 张`).fontSize(13).fontColor('#888888').margin({ top: 4 })
+        }.alignItems(HorizontalAlign.Start)
+        Blank()
+        Stack() {
+          Progress({ value: this.collectionProgress, total: 100, type: ProgressType.Ring }).color('#FF69B4').width(44)
+          Text(`${this.collectionProgress}%`).fontSize(10).fontColor('#FF69B4').fontWeight(FontWeight.Bold)
+        }.margin({ right: 32 })
+      }.width('100%').padding({ left: 24, right: 24, top: 24, bottom: 10 })
+      Divider().color('#F9F9F9').width('90%')
+      Grid() {
+        ForEach(TAROT_DECK, (card: TarotCard) => {
+          GridItem() {
+            Column() {
+              if (this.isCollected(card.id)) {
+                Stack() {
+                  Image($rawfile(card.image)).width('100%').aspectRatio(2/3).borderRadius(10)
+                    .shadow({ radius: 8, color: this.getCardRarityColor(card.id), offsetY: 2 })
+                }
+                Text(card.name).fontSize(12).fontColor('#333').fontWeight(FontWeight.Medium).margin({ top: 8 })
+              } else {
+                Stack() {
+                  Rect().width('100%').height('100%').fill('#F7F8FA').borderRadius(10).strokeWidth(1).stroke('#F0F0F0')
+                  Column({space: 4}) { Text("🔒").fontSize(18).fontColor('#DDD'); Text("???").fontSize(10).fontColor('#EEE') }
+                }.width('100%').aspectRatio(2/3)
+                Text("待解锁").fontSize(12).fontColor('#EEE').margin({ top: 8 })
+              }
+            }
+          }
+        })
+      }.columnsTemplate('1fr 1fr 1fr').columnsGap(12).rowsGap(20).padding({ left: 20, right: 20, top: 20, bottom: 80 }).layoutWeight(1)
+    }
+    .width('100%')
+    .height('85%') // 模拟 SheetSize.LARGE
+    .backgroundColor(Color.White)
+    .borderRadius({ topLeft: 24, topRight: 24 })
+  }
+
+  @Builder EnergySheetBuilder() {
+    Column() {
+      Row().width(40).height(5).backgroundColor('#E0E0E0').borderRadius(10).margin({ top: 10, bottom: 20 })
+      Text("⚡ 心力加油站").fontSize(20).fontWeight(FontWeight.Bold).fontColor('#333').margin({ bottom: 8 })
+      Text(`当前剩余: ${this.currentEnergy}`).fontSize(14).fontColor('#999').margin({ bottom: 30 })
+
+      Row() {
+        Column() { Text("每日补给").fontSize(16).fontWeight(FontWeight.Bold); Text("每天 00:00 自动恢复至 20 点").fontSize(12).fontColor('#999').margin({ top: 4 }) }.alignItems(HorizontalAlign.Start)
+        Blank()
+        Button("已领取").backgroundColor('#F5F5F5').fontColor('#BBB').height(32).fontSize(12).enabled(false)
+      }.width('90%').padding(16).backgroundColor('#FAFAFA').borderRadius(16).margin({ bottom: 12 })
+
+      Row() {
+        Column() { Text("观看广告").fontSize(16).fontWeight(FontWeight.Bold); Text("立即获得 +10 心力").fontSize(12).fontColor('#999').margin({ top: 4 }) }.alignItems(HorizontalAlign.Start)
+        Blank()
+        Button("去观看").backgroundColor('#E0F7FA').fontColor('#006064').height(32).fontSize(12).onClick(() => this.handleRecharge(10))
+      }.width('90%').padding(16).backgroundColor('#FAFAFA').borderRadius(16).margin({ bottom: 12 })
+
+      Row() {
+        Column() { Text("心力礼包").fontSize(16).fontWeight(FontWeight.Bold); Text("获得 +100 心力").fontSize(12).fontColor('#999').margin({ top: 4 }) }.alignItems(HorizontalAlign.Start)
+        Blank()
+        Button("¥ 6.00").backgroundColor('#FFF0F5').fontColor('#FF69B4').height(32).fontSize(12).onClick(() => this.handleRecharge(100))
+      }.width('90%').padding(16).backgroundColor('#FAFAFA').borderRadius(16)
+    }
+    .width('100%')
+    .height('50%') // 模拟 SheetSize.MEDIUM
+    .backgroundColor(Color.White)
+    .borderRadius({ topLeft: 24, topRight: 24 })
+  }
 
   @Builder ShareSheetBuilder() {
     if (!this.currentCard) {
@@ -454,93 +558,11 @@ struct Index {
     }
   }
 
-  // ✨✨✨ 展览厅全新构建逻辑 ✨✨✨
-  @Builder GallerySheetBuilder() {
-    Stack({ alignContent: Alignment.Bottom }) {
-      // 1. 背景层：纯白底色，确保无色差
-      Column().width('100%').height('100%').backgroundColor(Color.White)
-
-      // 2. 内容层
-      Column() {
-        // 顶部 Header
-        Row() {
-          Column() {
-            Text("治愈展览厅").fontSize(24).fontWeight(FontWeight.Bold).fontColor('#333333')
-            Text(`已收集 ${this.galleryList.length} / ${TAROT_DECK.length} 张`).fontSize(13).fontColor('#888888').margin({ top: 4 })
-          }.alignItems(HorizontalAlign.Start)
-          Blank()
-          Stack() {
-            Progress({ value: this.collectionProgress, total: 100, type: ProgressType.Ring }).color('#FF69B4').width(44)
-            Text(`${this.collectionProgress}%`).fontSize(10).fontColor('#FF69B4').fontWeight(FontWeight.Bold)
-          }.margin({ right: 32 })
-        }
-        .width('100%').padding({ left: 24, right: 24, top: 24, bottom: 10 })
-
-        Divider().color('#F9F9F9').width('90%')
-
-        // 网格列表
-        Grid() {
-          ForEach(TAROT_DECK, (card: TarotCard) => {
-            GridItem() {
-              Column() {
-                if (this.isCollected(card.id)) {
-                  // 已收集：精致卡片
-                  Stack() {
-                    Image($rawfile(card.image))
-                      .width('100%').aspectRatio(2/3).borderRadius(10)
-                      .shadow({ radius: 8, color: this.getCardRarityColor(card.id), offsetY: 2 })
-                  }
-                  Text(card.name).fontSize(12).fontColor('#333').fontWeight(FontWeight.Medium).margin({ top: 8 })
-                } else {
-                  // 未收集：更有质感的锁定态
-                  Stack() {
-                    Rect().width('100%').height('100%').fill('#F7F8FA').borderRadius(10) // 浅灰底
-                      .strokeWidth(1).stroke('#F0F0F0') // 描边
-                    Column({space: 4}) {
-                      Text("🔒").fontSize(18).fontColor('#DDD')
-                      Text("???").fontSize(10).fontColor('#EEE')
-                    }
-                  }.width('100%').aspectRatio(2/3)
-                  Text("待解锁").fontSize(12).fontColor('#EEE').margin({ top: 8 })
-                }
-              }
-            }
-          })
-        }
-        .columnsTemplate('1fr 1fr 1fr')
-        .columnsGap(12)
-        .rowsGap(20)
-        // 🛠️ 修复：底部 padding 给足，让内容可以滚动到羽化层之上
-        .padding({ left: 20, right: 20, top: 20, bottom: 80 })
-        .layoutWeight(1)
-      }
-
-      // 3. 底部羽化遮罩 (Fade Out)
-      // 这是一个从透明到白色的渐变层，覆盖在底部，消除生硬的截断感
-      Row()
-        .width('100%')
-        .height(60)
-        .linearGradient({
-          direction: GradientDirection.Bottom,
-          colors: [['rgba(255,255,255,0)', 0.0], ['rgba(255,255,255,1)', 1.0]]
-        })
-        .hitTestBehavior(HitTestMode.None) // 允许点击穿透（如果有按钮在下面的话，这里只是视觉遮罩）
-    }
-    .width('100%')
-    .height('85%')
-    .borderRadius({ topLeft: 24, topRight: 24 })
-    .backgroundColor(Color.White) // 确保 Stack 本身也是白底
-  }
-
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
-      // 1. 全局背景 (沉底)
-      // 改为在 Stack 容器上使用 .linearGradient 属性
-
-      // 2. 主内容区
       Scroll() {
         Column() {
-          // 顶部 Header
+          // Top Bar
           Row() {
             if (this.isFlipped) {
               Button({ type: ButtonType.Circle }) { Text('↺').fontSize(18).fontColor('#666666') }
@@ -550,90 +572,176 @@ struct Index {
               Text("DAILY TAROT").fontSize(12).fontWeight(FontWeight.Bold).fontColor('#CCCCCC').letterSpacing(2)
             }
             Blank()
+            // 心力值入口
+            Row() {
+              Text('⚡').fontSize(14)
+              Text(`${this.currentEnergy}`).fontSize(14).fontColor('#FF69B4').fontWeight(FontWeight.Bold).margin({left: 2})
+            }.backgroundColor('rgba(255,255,255,0.6)').padding({left: 10, right: 10, top: 6, bottom: 6}).borderRadius(14).margin({right: 12}).onClick(() => this.handleBuyVip())
+
             // 展览厅入口
             Button({ type: ButtonType.Circle }) { Text('🏛️').fontSize(18) }
             .width(40).height(40).backgroundColor(Color.White).shadow({ radius: 8, color: 'rgba(0,0,0,0.05)' })
             .onClick(() => this.loadGalleryData())
-          }
-          .width('100%').padding({ left: 24, right: 24, top: 16 }).height(60)
+          }.width('100%').padding({ left: 24, right: 24, top: 16 }).height(60)
 
           Blank().height(20)
 
-          // 3D 卡牌容器
+          // === 3D 卡牌与特效容器 ===
           Stack() {
-            // 装饰光晕 (随呼吸动画变化)
+            // 1. 底层光晕
             Circle({ width: 260, height: 260 }).fill('#FFFFFF').opacity(0.5)
               .scale({ x: this.mysteryScale, y: this.mysteryScale }).blur(40)
 
-            // 装饰性牌堆 (增加厚度感)
+            // 2. SSR 爆发光环
+            if (this.rarityLevel >= 5) {
+              Circle({ width: 200, height: 200 })
+                .fill(this.rarityColor)
+                .scale({ x: this.glowScale, y: this.glowScale })
+                .opacity(this.glowOpacity)
+                .blur(20)
+            }
+
+            // 3. 装饰性牌堆
             Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
               .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset1 }).rotate({ z: 1, angle: this.deckAngle1 }).opacity(this.deckOpacity)
             Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
               .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset2 }).rotate({ z: 1, angle: this.deckAngle2 }).opacity(this.deckOpacity)
 
-            // 主卡牌 (背面)
+            // 4. 主卡牌 (背面)
             Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
               .rotate({ x: 0, y: 1, z: 0, angle: this.angle }).opacity(this.angle < 90 ? 1 : 0)
 
-            // 主卡牌 (正面)
+            // 5. 主卡牌 (正面)
             if (this.currentCard) {
               Image($rawfile(this.currentCard.image))
                 .width('100%').height('100%').borderRadius(16)
                 .rotate({ x: 0, y: 1, z: 0, angle: this.angle - 180 }).opacity(this.angle >= 90 ? 1 : 0)
             }
+
+            // 6. SSR 前景星星
+            if (this.currentCard && this.rarityLevel >= 6 && this.isFlipped) {
+              Text("✨").fontSize(40).position({x: -20, y: -20})
+                .scale({x: this.starScale, y: this.starScale})
+                .rotate({angle: -15})
+                .animation({duration: 1000, iterations: -1, playMode: PlayMode.Alternate})
+              Text("✨").fontSize(30).position({x: '85%', y: '85%'})
+                .scale({x: this.starScale, y: this.starScale})
+                .rotate({angle: 15})
+                .animation({duration: 1200, iterations: -1, playMode: PlayMode.Alternate, delay: 200})
+            }
           }
           .width('70%').aspectRatio(2/3).margin({ top: 20, bottom: 30 })
-          // 复合动画绑定
           .rotate({ z: 1, angle: this.mainRotateZ + this.shuffleRotate })
           .translate({ x: this.shuffleOffsetX, y: this.floatOffsetY + this.mainOffsetY })
           .scale({ x: this.shuffleScale * this.clickScale, y: this.shuffleScale * this.clickScale })
-          // 🌟 珍稀度光晕绑定到阴影颜色 🌟
           .shadow({ radius: this.shadowRadius, color: this.shadowColor, offsetY: this.shadowOffsetY })
           .onClick(() => { this.handleDrawCard(); })
 
-          // 结果展示区
+          // 结果与按钮
           if (this.showResultText && this.currentCard) {
             Column() {
               Text(this.currentCard.name).fontSize(24).fontWeight(FontWeight.Bold).fontColor('#333333').margin({bottom: 4})
               Text(this.currentCard.name_en).fontSize(14).fontColor('#AAAAAA').fontStyle(FontStyle.Italic).margin({bottom: 16})
               Text(this.currentCard.desc).fontSize(16).fontColor('#555555').textAlign(TextAlign.Center).lineHeight(26).padding({ left: 20, right: 20 }).opacity(0.9)
-
               Divider().color('#F0F0F0').width('80%').margin({top: 24, bottom: 24})
-
-              // 功能按钮组
               Row({ space: 12 }) {
                 Button("✨ 分享").backgroundColor('#333333').fontColor(Color.White).height(44).layoutWeight(1).borderRadius(22).onClick(() => this.handleShare())
-                if (this.isVip) {
-                  Button("🔮 三牌阵").backgroundColor('#E0F7FA').fontColor('#006064').height(44).layoutWeight(1).borderRadius(22).onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
-                } else {
-                  Button("🔓 解锁更多").backgroundColor('#FFF0F5').fontColor('#FF69B4').height(44).layoutWeight(1).borderRadius(22).onClick(() => this.handleBuyVip())
-                }
-              }.width('90%')
-
-              // 底部小工具
-              // 🛠️ 移除用户不需要的“私密”和“呼吸”按钮
+                Button("🔮 三牌阵").backgroundColor('#E0F7FA').fontColor('#006064').height(44).layoutWeight(1).borderRadius(22).onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
+              }.width('90%').margin({ bottom: 12 })
+              // 充值入口
+              Button("⚡ 补充心力").backgroundColor('#FFF0F5').fontColor('#FF69B4').height(44).width('90%').borderRadius(22).onClick(() => this.handleBuyVip())
             }
-            .width('92%')
-            .backgroundColor('rgba(255,255,255,0.8)').backdropBlur(10).borderRadius(24)
-            .padding({ top: 30, bottom: 20 })
+            .width('92%').backgroundColor('rgba(255,255,255,0.8)').backdropBlur(10).borderRadius(24).padding({ top: 30, bottom: 20 })
             .shadow({ radius: 20, color: 'rgba(0,0,0,0.04)', offsetY: 5 })
             .transition({ type: TransitionType.Insert, opacity: 0, translate: { y: 20 } })
           } else {
             Text("点击卡牌，开启今日指引").fontSize(14).fontColor('#AAAAAA').letterSpacing(1).opacity(this.guideOpacity).margin({ top: 20 })
           }
-
           Blank().height(120)
         }.width('100%')
       }
       .width('100%').height('100%').scrollBar(BarState.Off)
 
-      // 3. 悬浮导航栏
       BottomNavBar({ current: 'index' })
 
-      // 4. 弹窗层
+      // 🚀 手写弹窗逻辑：展览厅
+      if (this.isGallerySheetOpen) {
+        Column() {
+          // 遮罩层
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => {
+              animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+                this.isGallerySheetOpen = false;
+              });
+            })
+            // 🟢 修复：去掉 type: TransitionType.Opacity，直接写 opacity: 0
+            .transition({ opacity: 0 })
+            .zIndex(100)
+
+          // 弹窗内容层
+          Column() {
+            this.GallerySheetBuilder()
+          }
+          .width('100%')
+          .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
+          .zIndex(101)
+          .position({ y: '15%' }) // 模拟 SheetSize.LARGE 效果
+          .constraintSize({ maxWidth: 480 }) // 适配大屏
+        }
+        .width('100%')
+        .height('100%')
+        .zIndex(200)
+      }
+
+      // 🚀 手写弹窗逻辑：能量充值
+      if (this.isEnergySheetOpen) {
+        Column() {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => {
+              animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+                this.isEnergySheetOpen = false;
+              });
+            })
+            // 🟢 修复：去掉 type: TransitionType.Opacity
+            .transition({ opacity: 0 })
+            .zIndex(100)
+
+          Column() {
+            this.EnergySheetBuilder()
+          }
+          .width('100%')
+          .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
+          .zIndex(101)
+          .position({ y: '50%' }) // 模拟 SheetSize.MEDIUM 效果
+          .constraintSize({ maxWidth: 480 }) // 适配大屏
+        }
+        .width('100%')
+        .height('100%')
+        .zIndex(200)
+      }
+
+      // 🚀 手写弹窗逻辑：分享
       if (this.isShareSheetOpen) {
-        Stack({ alignContent: Alignment.Bottom }) {
-          Column().width('100%').height('100%').backgroundColor('rgba(0,0,0,0.4)').onClick(() => this.isShareSheetOpen = false)
+        Column() {
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => {
+              animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+                this.isShareSheetOpen = false;
+              });
+            })
+            // 🟢 修复：去掉 type: TransitionType.Opacity
+            .transition({ opacity: 0 })
+            .zIndex(100)
+
           Column() {
             this.ShareSheetBuilder()
             Row({ space: 16 }) {
@@ -641,19 +749,20 @@ struct Index {
               Button('发送给好友').backgroundColor('#333').fontColor('#FFF').layoutWeight(1).height(48).borderRadius(24).onClick(() => this.handleSystemShare())
             }.width('90%').margin({ top: 20, bottom: 30 })
           }
-          .width('100%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
-        }.zIndex(200)
+          .width('100%')
+          .backgroundColor(Color.White)
+          .borderRadius({ topLeft: 24, topRight: 24 })
+          .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
+          .zIndex(101)
+          .position({ y: '30%' }) // 自定义高度
+          .constraintSize({ maxWidth: 480 }) // 适配大屏
+        }
+        .width('100%')
+        .height('100%')
+        .zIndex(200)
       }
     }
-    .width('100%')
-    .height('100%')
-    // 🛠️ 修复：在这里应用全局背景渐变
-    .linearGradient({
-      direction: GradientDirection.Top,
-      colors: [['#FDFBFB', 0.0], ['#F2F4F8', 1.0]]
-    })
-    .bindSheet($$this.isGallerySheetOpen, this.GallerySheetBuilder(), {
-      height: SheetSize.LARGE, backgroundColor: Color.Transparent, blurStyle: BlurStyle.Thin, showClose: true
-    })
+    .width('100%').height('100%')
+    .linearGradient({ direction: GradientDirection.Top, colors: [['#FDFBFB', 0.0], ['#F2F4F8', 1.0]] })
   }
 }
