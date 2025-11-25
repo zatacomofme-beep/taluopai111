@@ -13,7 +13,8 @@ import { EnergyManager } from '../common/EnergyManager';
 struct SpreadPage {
   @State cards: TarotCard[] = [];
   @State cardStates: number[] = [0, 0, 0];
-  @State cardImages: Resource[] = [$rawfile('card_back.png'), $rawfile('card_back.png'), $rawfile('card_back.png')];
+  // 🟢 修复：ResourceStr 类型兼容字符串(URL)和Resource(本地)
+  @State cardImages: ResourceStr[] = [$rawfile('card_back.png'), $rawfile('card_back.png'), $rawfile('card_back.png')];
 
   // 动画变量
   @State cardAngles: number[] = [0, 0, 0];
@@ -40,6 +41,14 @@ struct SpreadPage {
   private energyManager = EnergyManager.getInstance();
   private positions = ['过去 · The Past', '现在 · The Present', '未来 · The Future'];
   private context = getContext(this) as common.UIAbilityContext;
+
+  // 🟢 新增：智能图片源处理方法
+  getCardImageSource(url: string): ResourceStr {
+    if (url.startsWith('http')) {
+      return url; // 网络图片直接返回字符串
+    }
+    return $rawfile(url); // 本地图片包裹 $rawfile
+  }
 
   async aboutToAppear() {
     this.cards = this.manager.drawThreeSpread();
@@ -85,7 +94,10 @@ struct SpreadPage {
     animateTo({ duration: 400, curve: curves.springMotion(0.6, 0.8) }, () => { this.cardAngles[index] = 90; this.cardFlightScales[index] = 1.15; });
 
     setTimeout(() => {
-      this.cardImages[index] = $rawfile(this.cards[index].image);
+      // 🟢 修复：这里不再强制包裹 $rawfile，而是让 Image 组件自己处理
+      // 实际上这行可能不需要，因为 build 里面是直接读 cards 数据的，但为了逻辑严谨保留
+      this.cardImages[index] = this.cards[index].image;
+
       animateTo({ duration: 500, curve: curves.springMotion(0.5, 0.7) }, () => { this.cardAngles[index] = 180; this.cardFlightScales[index] = 1.0; });
       setTimeout(() => {
         this.cardStates[index] = 2;
@@ -97,7 +109,6 @@ struct SpreadPage {
     }, 400);
   }
 
-  // 🚀 关键修改：获取心情并传给 AI
   async handleAIAnalyze() {
     this.isSheetOpen = true;
     this.currentEnergy = this.energyManager.getEnergy();
@@ -105,10 +116,7 @@ struct SpreadPage {
     if (this.chatHistory.length > 0) return;
     this.isAnalyzing = true;
 
-    // 1. 获取今日心情
     const todayMood = await this.manager.getTodayMood();
-
-    // 2. 生成包含心情的 Prompt
     const initialPrompt = AIService.createInitialPrompt(this.cards, todayMood);
 
     const userMsg: ChatMessage = { role: 'user', content: initialPrompt };
@@ -118,7 +126,6 @@ struct SpreadPage {
 
     const requestHistory = [userMsg];
 
-    // 3. 发送请求
     const resultText = await AIService.requestChat(requestHistory, this.context, true);
 
     this.currentEnergy = this.energyManager.getEnergy();
@@ -190,7 +197,6 @@ struct SpreadPage {
               Row() {
                 if (msg.role === 'user') {
                   Blank()
-                  // 这里可以优化显示，不要把完整的 Prompt 显示出来，只显示“开始解读...”
                   Text(msg.content.startsWith('【用户当前状态】') ? '🔮 开始深度解读...' : msg.content)
                     .fontSize(15).fontColor(Color.White).backgroundColor('#FFB6C1').padding(12)
                     .borderRadius({ topLeft: 15, topRight: 5, bottomLeft: 15, bottomRight: 15 }).margin({ left: 40 })
@@ -233,8 +239,20 @@ struct SpreadPage {
         ForEach([0, 1, 2], (index: number) => {
           Row() {
             Stack() {
-              Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(10).rotate({ x: 0, y: 1, z: 0, angle: this.cardAngles[index] }).opacity(this.cardAngles[index] < 90 ? 1 : 0)
-              Image($rawfile(this.cards[index].image)).width('100%').height('100%').borderRadius(10).rotate({ x: 0, y: 1, z: 0, angle: this.cardAngles[index] - 180 }).opacity(this.cardAngles[index] >= 90 ? 1 : 0).scale({ x: 1, y: this.cardFlightScales[index] })
+              // 背面：本地图片，保持 $rawfile
+              Image($rawfile('card_back.png'))
+                .width('100%').height('100%').borderRadius(10)
+                .rotate({ x: 0, y: 1, z: 0, angle: this.cardAngles[index] })
+                .opacity(this.cardAngles[index] < 90 ? 1 : 0)
+
+              // 🟢 修复核心：使用 getCardImageSource 智能判断
+              // 正面：如果是 http 链接，Image 组件会自动处理；如果是本地名，getCardImageSource 会包 $rawfile
+              Image(this.getCardImageSource(this.cards[index].image))
+                .width('100%').height('100%').borderRadius(10)
+                .rotate({ x: 0, y: 1, z: 0, angle: this.cardAngles[index] - 180 })
+                .opacity(this.cardAngles[index] >= 90 ? 1 : 0)
+                .scale({ x: 1, y: this.cardFlightScales[index] })
+                .alt($rawfile('card_back.png')) // 加载失败或加载中显示背面
             }
             .width(110).aspectRatio(2/3).shadow({ radius: 15, color: 'rgba(0,0,0,0.4)', offsetY: 8 })
             .translate({ y: this.cardFloatOffsets[index] }).rotate({ z: 1, angle: this.cardFloatAngles[index] }).scale({ x: this.cardClickScales[index], y: this.cardClickScales[index] })
@@ -261,7 +279,6 @@ struct SpreadPage {
 
       if (this.cardStates[2] === 2) {
         Column() {
-          // 在按钮上提示消耗
           Button(`🔮 深度分析 (消耗 ${AIService.COST_DEEP_ANALYSIS} 心力)`).backgroundColor('#FF69B4').fontColor(Color.White).width('80%').height(50).borderRadius(25)
             .shadow({ radius: 10, color: 'rgba(255, 105, 180, 0.4)', offsetY: 5 }).onClick(() => this.handleAIAnalyze())
         }
