@@ -10,7 +10,7 @@
     },
     {
       "name": "Entry001Ability_label",
-      "value": "梦之书"
+      "value": "治愈之书"
     },
     {
       "name": "Entry001FormAbility_desc",
@@ -38,11 +38,11 @@
     },
     {
       "name": "perm_read_image_desc",
-      "value": "用于读取相册中的图片以完成分享和保存"
+      "value": "应用需要读取相册以保存分享海报或上传图片"
     },
     {
       "name": "perm_write_image_desc",
-      "value": "用于将生成的海报保存到系统相册"
+      "value": "应用需要写入相册以保存生成的分享海报"
     }
   ]
 }
