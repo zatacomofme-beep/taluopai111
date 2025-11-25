@@ -1,10 +1,9 @@
 import http from '@ohos.net.http';
-// 🔴 移除未使用的 promptAction
 import { UserManager } from './UserManager';
 import { FortuneManager } from './FortuneManager';
 
 export class CloudService {
-  // 🔴 请确保这里是您的华为云 ECS 公网 IP
+  // 🔴 核心修改：换成你的华为云服务器公网 IP
   private static readonly BASE_URL = 'http://1.94.149.144:3000/api';
   private static readonly SERVER_ROOT = 'http://1.94.149.144:3000';
 
@@ -68,28 +67,26 @@ export class CloudService {
     }
   }
 
-  // 🟢 自动静默备份 (不打扰用户，仅在后台运行)
+  // 自动静默备份
   static async autoSave() {
     const userMgr = UserManager.getInstance();
     const fortuneMgr = FortuneManager.getInstance();
 
     const user = userMgr.getCurrentUser();
     if (!userMgr.isLoggedIn() || !user) {
-      console.info('CloudService: 未登录，跳过自动备份');
       return;
     }
 
-    console.info('☁️ CloudService: 开始后台自动备份...');
     const allData = await fortuneMgr.exportAllData();
 
-    // 🔴 修复：使用类名 CloudService 调用，而不是 this
+    // 使用类名调用
     CloudService.backupData(user.userId, user.token, allData).then((success) => {
       if (success) console.info('✅ CloudService: 自动备份成功');
       else console.warn('⚠️ CloudService: 自动备份失败');
     });
   }
 
-  // 🟢 自动静默恢复 (通常在 App 启动时调用)
+  // 自动静默恢复
   static async autoRestore(): Promise<boolean> {
     const userMgr = UserManager.getInstance();
     const fortuneMgr = FortuneManager.getInstance();
@@ -97,9 +94,7 @@ export class CloudService {
     const user = userMgr.getCurrentUser();
     if (!userMgr.isLoggedIn() || !user) return false;
 
-    console.info('☁️ CloudService: 开始后台自动同步数据...');
-
-    // 🔴 修复：使用类名 CloudService 调用，而不是 this
+    // 使用类名调用
     const jsonStr = await CloudService.restoreData(user.userId, user.token);
 
     if (jsonStr) {
