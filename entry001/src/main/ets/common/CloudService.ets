@@ -1,10 +1,10 @@
 import http from '@ohos.net.http';
-import { promptAction } from '@kit.ArkUI';
+// 🔴 移除未使用的 promptAction
 import { UserManager } from './UserManager';
 import { FortuneManager } from './FortuneManager';
 
 export class CloudService {
-  // 替换为你的真实 IP
+  // 🔴 请确保这里是您的华为云 ECS 公网 IP
   private static readonly BASE_URL = 'http://1.94.149.144:3000/api';
   private static readonly SERVER_ROOT = 'http://1.94.149.144:3000';
 
@@ -68,32 +68,28 @@ export class CloudService {
     }
   }
 
-  // 🟢 新增：自动云备份 (静默执行，只在失败时打印日志，不打扰用户)
+  // 🟢 自动静默备份 (不打扰用户，仅在后台运行)
   static async autoSave() {
     const userMgr = UserManager.getInstance();
     const fortuneMgr = FortuneManager.getInstance();
 
-    // 1. 检查登录状态
     const user = userMgr.getCurrentUser();
     if (!userMgr.isLoggedIn() || !user) {
       console.info('CloudService: 未登录，跳过自动备份');
       return;
     }
 
-    // 2. 准备数据
+    console.info('☁️ CloudService: 开始后台自动备份...');
     const allData = await fortuneMgr.exportAllData();
 
-    // 3. 执行上传 (不阻塞主线程)
-    this.backupData(user.userId, user.token, allData).then((success) => {
-      if (success) {
-        console.info('☁️ CloudService: 自动备份成功');
-      } else {
-        console.warn('☁️ CloudService: 自动备份失败');
-      }
+    // 🔴 修复：使用类名 CloudService 调用，而不是 this
+    CloudService.backupData(user.userId, user.token, allData).then((success) => {
+      if (success) console.info('✅ CloudService: 自动备份成功');
+      else console.warn('⚠️ CloudService: 自动备份失败');
     });
   }
 
-  // 🟢 新增：自动云恢复 (通常在 App 启动时调用)
+  // 🟢 自动静默恢复 (通常在 App 启动时调用)
   static async autoRestore(): Promise<boolean> {
     const userMgr = UserManager.getInstance();
     const fortuneMgr = FortuneManager.getInstance();
@@ -101,10 +97,14 @@ export class CloudService {
     const user = userMgr.getCurrentUser();
     if (!userMgr.isLoggedIn() || !user) return false;
 
-    const jsonStr = await this.restoreData(user.userId, user.token);
+    console.info('☁️ CloudService: 开始后台自动同步数据...');
+
+    // 🔴 修复：使用类名 CloudService 调用，而不是 this
+    const jsonStr = await CloudService.restoreData(user.userId, user.token);
+
     if (jsonStr) {
       await fortuneMgr.importData(jsonStr);
-      console.info('☁️ CloudService: 自动恢复成功');
+      console.info('✅ CloudService: 数据已同步至本地');
       return true;
     }
     return false;
