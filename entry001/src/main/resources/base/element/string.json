@@ -2,11 +2,11 @@
   "string": [
     {
       "name": "module_desc",
-      "value": "module description"
+      "value": "模块描述"
     },
     {
       "name": "Entry001Ability_desc",
-      "value": "description"
+      "value": "描述"
     },
     {
       "name": "Entry001Ability_label",
@@ -14,27 +14,27 @@
     },
     {
       "name": "Entry001FormAbility_desc",
-      "value": "form_description"
+      "value": "卡片描述"
     },
     {
       "name": "Entry001FormAbility_label",
-      "value": "form_label"
+      "value": "卡片标签"
     },
     {
       "name": "DailyCard_desc",
-      "value": "This is a service widget."
+      "value": "这是一个服务卡片。"
     },
     {
       "name": "DailyCard_display_name",
-      "value": "DailyCard"
+      "value": "每日指引"
     },
     {
       "name": "card_title",
-      "value": "Title"
+      "value": "标题"
     },
     {
       "name": "introduction",
-      "value": "Introduction"
+      "value": "介绍"
     },
     {
       "name": "perm_read_image_desc",

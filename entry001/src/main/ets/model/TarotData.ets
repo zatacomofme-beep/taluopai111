@@ -4,19 +4,18 @@ export interface TarotCard {
   id: number;
   name: string;
   name_en: string;
-  image: string; // 这里将存储完整的 https 链接
+  image: string; // 存储完整的 https 链接
   meaning: string;
   desc: string;
 }
 
-// 🔴 请替换为你真实的 TOS 域名地址
-const TOS_BASE_URL = 'https://taluuopai.tos-cn-beijing.volces.com/tarot_cards/';
+// 🔴 替换为您的华为云 OBS 地址 (根据您的 OBS 链接信息)
+const OBS_BASE_URL = 'https://taluopai.obs.cn-southwest-2.myhuaweicloud.com/tarot_cards/';
 
 // 辅助函数：构建完整的图片 URL
-// 如果图片名本身包含 http，则直接使用；否则拼接 TOS 前缀
 function getImageUrl(filename: string): string {
   if (filename.startsWith('http')) return filename;
-  return `${TOS_BASE_URL}${filename}`;
+  return `${OBS_BASE_URL}${filename}`;
 }
 
 // 22张大阿卡纳 - 治愈绘本风数据
