@@ -3,6 +3,7 @@
     "pages/Index",
     "pages/SpreadPage",
     "pages/BreathingPage",
-    "pages/MoodPage"
+    "pages/MoodPage",
+    "pages/ProfilePage"
   ]
 }

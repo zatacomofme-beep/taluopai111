@@ -2,7 +2,7 @@ import { router } from '@kit.ArkUI';
 
 @Component
 export struct BottomNavBar {
-  @Prop current: string = 'index'; // index | breathing | mood
+  @Prop current: string = 'index'; // index | breathing | mood | profile
 
   @Builder
   NavItem(key: string, icon: string, label: string, targetUrl: string) {
@@ -19,7 +19,6 @@ export struct BottomNavBar {
         Text(icon)
           .fontSize(24)
           .scale(this.current === key ? { x: 1.1, y: 1.1 } : { x: 1, y: 1 })
-          // 🛠️ 修复：Curve.Spring 不存在，改为 Curve.Smooth
           .animation({ duration: 300, curve: Curve.Smooth })
       }
       .width(40)
@@ -43,17 +42,19 @@ export struct BottomNavBar {
 
   build() {
     Row() {
-      this.NavItem('index', '🔮', '今日指引', 'pages/Index')
-      this.NavItem('breathing', '🌬️', '呼吸冥想', 'pages/BreathingPage')
-      this.NavItem('mood', '📝', '心情日记', 'pages/MoodPage')
+      this.NavItem('index', '🔮', '指引', 'pages/Index')
+      this.NavItem('breathing', '🌬️', '呼吸', 'pages/BreathingPage')
+      this.NavItem('mood', '📝', '日记', 'pages/MoodPage')
+      // 新增：个人中心入口
+      this.NavItem('profile', '👤', '我的', 'pages/ProfilePage')
     }
     .width('90%')
     .height(70)
-    .backgroundColor('rgba(255, 255, 255, 0.85)') // 半透明白
-    .backdropBlur(20) // 毛玻璃模糊
-    .borderRadius(35) // 胶囊圆角
-    .shadow({ radius: 30, color: 'rgba(0,0,0,0.08)', offsetY: 10 }) // 柔和阴影
+    .backgroundColor('rgba(255, 255, 255, 0.95)') // 略微增加不透明度
+    .backdropBlur(20)
+    .borderRadius(35)
+    .shadow({ radius: 30, color: 'rgba(0,0,0,0.08)', offsetY: 10 })
     .padding({ left: 10, right: 10 })
-    .margin({ bottom: 20 }) // 悬浮距离底部
+    .margin({ bottom: 20 })
   }
 }

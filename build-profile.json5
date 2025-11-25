@@ -1,6 +1,20 @@
 {
   "app": {
-    "signingConfigs": [],
+    "signingConfigs": [
+      {
+        "name": "default",
+        "type": "HarmonyOS",
+        "material": {
+          "certpath": "C:\\Users\\tutumao01\\.ohos\\config\\default_taluopai111_JqaRaKQZ1FrRbF8fJ64kXHpMy_5ZZn0xBpR8HJoLxDQ=.cer",
+          "keyAlias": "debugKey",
+          "keyPassword": "0000001B93528D6BE879B549D2B835FCF2FC991B584A9D31C4A6C4EBFE2B97C86BEF23A0851ACF3C578FF7",
+          "profile": "C:\\Users\\tutumao01\\.ohos\\config\\default_taluopai111_JqaRaKQZ1FrRbF8fJ64kXHpMy_5ZZn0xBpR8HJoLxDQ=.p7b",
+          "signAlg": "SHA256withECDSA",
+          "storeFile": "C:\\Users\\tutumao01\\.ohos\\config\\default_taluopai111_JqaRaKQZ1FrRbF8fJ64kXHpMy_5ZZn0xBpR8HJoLxDQ=.p12",
+          "storePassword": "0000001B5AB3FE43E1A3D18C45D6B4DED7806C493D9E748F2ED45E2E89780FC964656958B384FB25DE0B04"
+        }
+      }
+    ],
     "products": [
       {
         "name": "default",

@@ -13,6 +13,8 @@ import { ImageSaver } from '../common/ImageSaver';
 import { EnergyManager } from '../common/EnergyManager';
 import { ShareHelper } from '../common/ShareHelper';
 import { CloudService } from '../common/CloudService';
+import { UserManager, UserInfo } from '../common/UserManager'; // 确保 UserManager.ets 文件存在
+import { BusinessError } from '@kit.BasicServicesKit';
 
 @Entry
 @Component
@@ -91,8 +93,12 @@ struct Index {
   // === ⚡ 能量显示与充值 ===
   @State currentEnergy: number = 0;
 
+  // === 👤 用户信息 ===
+  @State currentUserInfo: UserInfo | null = null; // 👈 新增：存储当前用户信息
+
   private manager = FortuneManager.getInstance();
   private energyManager = EnergyManager.getInstance();
+  private userManager = UserManager.getInstance();
   private context = getContext(this) as common.UIAbilityContext;
   private POSTER_ID = 'poster_component_id';
 
@@ -111,7 +117,7 @@ struct Index {
     this.initDate();
     this.startGuideAnimation();
 
-    // 获取今日心情数据，用于判断是否显示“去记录”按钮
+    // 获取今日心情数据
     const mood = await this.manager.getTodayMood();
     this.moodIndex = mood.mood;
     this.moodNote = mood.note;
@@ -120,19 +126,28 @@ struct Index {
     this.goldQuote = aff.quote;
     this.dailyTask = aff.task;
     this.privacyMode = await this.manager.isPrivacyMode();
+
+    // 👈 新增：初始化时检查登录状态
+    this.refreshLoginStatus();
   }
 
   onPageShow() {
     this.refreshEnergy();
-    // 每次页面显示都刷新一下心情状态，防止从心情页回来没更新
     void (async () => {
       const mood = await this.manager.getTodayMood();
       this.moodIndex = mood.mood;
     })();
+    // 👈 每次页面显示也刷新登录状态
+    this.refreshLoginStatus();
   }
 
   refreshEnergy() {
     this.currentEnergy = this.energyManager.getEnergy();
+  }
+
+  // 👈 新增：刷新登录状态方法
+  refreshLoginStatus() {
+    this.currentUserInfo = this.userManager.getCurrentUser();
   }
 
   initDate() {
@@ -190,7 +205,12 @@ struct Index {
       void (async () => {
         const ids = await this.manager.getFormIds();
         for (const id of ids) {
-          try { await formProvider.updateForm(id, formData); } catch (e) { const _err = e as Error | object; }
+          try {
+            await formProvider.updateForm(id, formData);
+          } catch (e) {
+            const _err = e as BusinessError;
+            console.error(`Form update failed: ${_err.message}`);
+          }
         }
       })();
     } catch (err) {
@@ -203,7 +223,6 @@ struct Index {
     promptAction.showToast({ message: '🔄 已重置', duration: 1000 });
   }
 
-  // === 充值相关 ===
   handleBuyVip() {
     animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
       this.isEnergySheetOpen = true;
@@ -219,7 +238,6 @@ struct Index {
     });
   }
 
-  // === 🌈 珍稀度计算逻辑 ===
   calculateRarity() {
     const rand = Math.random() * 100;
     if (rand < 0.1) { this.rarityLevel = 7; this.rarityColor = 'rgba(255, 215, 0, 0.9)'; }
@@ -242,7 +260,6 @@ struct Index {
     return map[idx];
   }
 
-  // === 动画组 ===
   startGuideAnimation() { animateTo({ duration: 1500, curve: Curve.EaseInOut, iterations: -1, playMode: PlayMode.Alternate }, () => { this.guideOpacity = 0.3; }); }
 
   startMysteryAnimation() {
@@ -262,7 +279,6 @@ struct Index {
 
   handleClickFeedback() { animateTo({ duration: 100, curve: Curve.EaseOut }, () => { this.clickScale = 0.95; }); setTimeout(() => { animateTo({ duration: 400, curve: curves.springMotion(0.5, 0.6) }, () => { this.clickScale = 1; }); }, 100); }
 
-  // === 🃏 核心抽卡逻辑 ===
   async handleDrawCard() {
     if (this.isFlipped) {
       if (this.currentCard) {
@@ -378,6 +394,8 @@ struct Index {
       promptAction.showToast({ message: '正在生成...', duration: 1000 });
       await ShareHelper.snapshotAndShare(this.context, this.POSTER_ID);
     } catch (err) {
+      const error = err as BusinessError;
+      console.error(`Share failed: ${error.message}`);
       promptAction.showToast({ message: '分享失败，请重试', duration: 2000 });
     }
   }
@@ -389,7 +407,11 @@ struct Index {
       const pixelMap = await componentSnapshot.get(this.POSTER_ID);
       await ImageSaver.saveToAlbum(this.context, pixelMap);
       this.isShareSheetOpen = false;
-    } catch (err) { promptAction.showToast({ message: '保存失败', duration: 2000 }); }
+    } catch (err) {
+      const error = err as BusinessError;
+      console.error(`Save failed: ${error.message}`);
+      promptAction.showToast({ message: '保存失败', duration: 2000 });
+    }
   }
 
   async ensureAlbumPermissions(): Promise<boolean> {
@@ -397,7 +419,9 @@ struct Index {
       const atManager = abilityAccessCtrl.createAtManager();
       const result = await atManager.requestPermissionsFromUser(this.context, ['ohos.permission.READ_IMAGEVIDEO', 'ohos.permission.WRITE_IMAGEVIDEO']);
       return Array.isArray(result.authResults) ? result.authResults.every(v => v === 0) : true;
-    } catch { return false; }
+    } catch (err) {
+      return false;
+    }
   }
 
   async setMood(index: number) {
@@ -432,10 +456,34 @@ struct Index {
   getThemePrimaryTextColor(): string { return this.shareTheme === 'star' ? '#EEEEEE' : '#333333'; }
   getThemeSecondaryTextColor(): string { return this.shareTheme === 'star' ? '#BBBBBB' : '#888888'; }
 
+  // 🚀 改写后的云同步逻辑：集成华为登录
   async handleCloudSync() {
-    const mockUserId = "user_001";
-    const mockToken = "token_test";
-    promptAction.showToast({ message: '正在连接服务器...', duration: 1000 });
+    // 1. 检查本地是否已登录
+    let currentUser = this.userManager.getCurrentUser();
+
+    if (!this.userManager.isLoggedIn()) {
+      try {
+        promptAction.showToast({ message: '正在连接华为账号...', duration: 1500 });
+        // 调用 UserManager 执行登录（包含静默 + 交互重试）
+        currentUser = await this.userManager.login(this.context);
+        // 👈 登录成功后，刷新本地状态，触发 UI 更新
+        this.refreshLoginStatus();
+        promptAction.showToast({ message: `欢迎回来，${currentUser.nickname}`, duration: 2000 });
+      } catch (err) {
+        const error = err as BusinessError;
+        console.error('登录失败', JSON.stringify(error));
+        promptAction.showToast({ message: '需要登录才能同步数据哦', duration: 2000 });
+        return;
+      }
+    }
+
+    if (!currentUser) return;
+
+    const realUserId = currentUser.userId;
+    const realToken = currentUser.token;
+
+    // 2. 连接服务器逻辑 (使用真实的 ID 和 Token)
+    promptAction.showToast({ message: '正在连接云端...', duration: 1000 });
     const isOnline = await CloudService.checkConnection();
     const statusEmoji = isOnline ? '🟢' : '🔴';
     const statusText = isOnline ? '服务器在线' : '服务器连接失败';
@@ -443,8 +491,8 @@ struct Index {
     promptAction.showDialog({
       title: `☁️ 云端同步 (${statusEmoji} ${statusText})`,
       message: isOnline
-        ? '请选择操作：\n• 上传：将当前手机的数据备份到云端\n• 下载：从云端覆盖本机数据'
-        : '⚠️ 无法连接到云服务器，请检查网络或联系管理员。',
+        ? `当前账号: ${currentUser.nickname}\n请选择操作：\n• 上传：备份本机数据到云端\n• 下载：从云端恢复数据到本机`
+        : '⚠️ 无法连接到云服务器，请检查网络。',
       buttons: [
         { text: '⬆️ 上传备份', color: isOnline ? '#007DFF' : '#CCCCCC' },
         { text: '⬇️ 下载恢复', color: isOnline ? '#007DFF' : '#CCCCCC' },
@@ -456,7 +504,8 @@ struct Index {
       if (data.index === 0) {
         promptAction.showToast({ message: '正在上传备份...', duration: 2000 });
         const allData = await this.manager.exportAllData();
-        const success = await CloudService.backupData(mockUserId, mockToken, allData);
+        // 传递真实用户数据给后端
+        const success = await CloudService.backupData(realUserId, realToken, allData);
         if (success) {
           promptAction.showToast({ message: '✅ 备份成功！' });
         } else {
@@ -464,7 +513,8 @@ struct Index {
         }
       } else {
         promptAction.showToast({ message: '正在下载恢复...', duration: 2000 });
-        const jsonStr = await CloudService.restoreData(mockUserId, mockToken);
+        // 传递真实用户数据给后端
+        const jsonStr = await CloudService.restoreData(realUserId, realToken);
         if (jsonStr) {
           const ok = await this.manager.importData(jsonStr);
           if (ok) {
@@ -479,6 +529,36 @@ struct Index {
         }
       }
     });
+  }
+
+  // 👈 新增：处理用户点击头像的逻辑
+  async handleUserClick() {
+    if (this.currentUserInfo) {
+      // 已登录：询问是否退出
+      promptAction.showDialog({
+        title: '账号管理',
+        message: `当前登录：${this.currentUserInfo.nickname}\n是否退出登录？`,
+        buttons: [
+          { text: '退出登录', color: '#FF0000' },
+          { text: '取消', color: '#999999' }
+        ]
+      }, (err, data) => {
+        if (data.index === 0) {
+          this.userManager.logout();
+          this.refreshLoginStatus();
+          promptAction.showToast({ message: '已退出登录' });
+        }
+      });
+    } else {
+      // 未登录：触发登录流程
+      try {
+        const user = await this.userManager.login(this.context);
+        this.refreshLoginStatus();
+        promptAction.showToast({ message: `欢迎，${user.nickname}` });
+      } catch (e) {
+        // 登录取消或失败，不做处理
+      }
+    }
   }
 
   @Builder GallerySheetBuilder() {
@@ -607,30 +687,42 @@ struct Index {
     Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
         Column() {
-          // Top Bar
           Row() {
-            if (this.isFlipped) {
-              Button({ type: ButtonType.Circle }) { Text('↺').fontSize(18).fontColor('#666666') }
-              .width(40).height(40).backgroundColor(Color.White).shadow({ radius: 8, color: 'rgba(0,0,0,0.05)' })
-              .onClick(() => this.handleManualReset())
-            } else {
-              Text("DAILY TAROT").fontSize(12).fontWeight(FontWeight.Bold).fontColor('#CCCCCC').letterSpacing(2)
+            // 👈 修改：左侧显示用户头像或登录提示
+            Row() {
+              if (this.currentUserInfo && this.currentUserInfo.avatar) {
+                Image(this.currentUserInfo.avatar)
+                  .width(32).height(32).borderRadius(16).margin({ right: 8 })
+              } else {
+                // 未登录显示默认图标
+                Text('👤').fontSize(24).margin({ right: 8 })
+              }
+
+              if (this.currentUserInfo) {
+                Text(this.currentUserInfo.nickname || '用户')
+                  .fontSize(14).fontColor('#333').fontWeight(FontWeight.Medium)
+              } else {
+                Text('登录').fontSize(14).fontColor('#666')
+              }
             }
+            .backgroundColor('rgba(255,255,255,0.6)')
+            .padding({ left: 8, right: 12, top: 6, bottom: 6 })
+            .borderRadius(20)
+            .onClick(() => this.handleUserClick())
+
             Blank()
 
-            // 3. 添加云同步按钮
+            // ☁️ 云同步入口 (已绑定新逻辑)
             Button({ type: ButtonType.Circle }) { Text('☁️').fontSize(16) }
             .width(36).height(36).backgroundColor('rgba(255,255,255,0.8)')
             .margin({ right: 12 })
             .onClick(() => this.handleCloudSync())
 
-            // 心力值入口
             Row() {
               Text('⚡').fontSize(14)
               Text(`${this.currentEnergy}`).fontSize(14).fontColor('#FF69B4').fontWeight(FontWeight.Bold).margin({left: 2})
             }.backgroundColor('rgba(255,255,255,0.6)').padding({left: 10, right: 10, top: 6, bottom: 6}).borderRadius(14).margin({right: 12}).onClick(() => this.handleBuyVip())
 
-            // 展览厅入口
             Button({ type: ButtonType.Circle }) { Text('🏛️').fontSize(18) }
             .width(40).height(40).backgroundColor(Color.White).shadow({ radius: 8, color: 'rgba(0,0,0,0.05)' })
             .onClick(() => this.loadGalleryData())
@@ -638,7 +730,6 @@ struct Index {
 
           Blank().height(20)
 
-          // === 3D 卡牌与特效容器 ===
           Stack() {
             Circle({ width: 260, height: 260 }).fill('#FFFFFF').opacity(0.5)
               .scale({ x: this.mysteryScale, y: this.mysteryScale }).blur(40)
@@ -691,11 +782,9 @@ struct Index {
               Divider().color('#F0F0F0').width('80%').margin({top: 24, bottom: 24})
               Row({ space: 12 }) {
                 Button("✨ 分享").backgroundColor('#333333').fontColor(Color.White).height(44).layoutWeight(1).borderRadius(22).onClick(() => this.handleShare())
-                // 🔴 修改：在这里添加了深度解读按钮
                 Button("🔮 深度解读").backgroundColor('#E0F7FA').fontColor('#006064').height(44).layoutWeight(1).borderRadius(22).onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
               }.width('90%').margin({ bottom: 12 })
 
-              // 🔴 修改：如果今天还没记心情，显示这个按钮
               if (this.moodIndex === -1) {
                 Button("📝 记录此刻心情")
                   .backgroundColor('#FFF0F5')
@@ -752,7 +841,6 @@ struct Index {
         }.width('100%').height('100%').zIndex(200)
       }
 
-      // 🚀 修复后的分享弹窗：去除了上传云端功能，只保留保存相册和分享
       if (this.isShareSheetOpen) {
         Column() {
           Column()
@@ -763,7 +851,6 @@ struct Index {
 
           Column() {
             this.ShareSheetBuilder()
-            // 🔴 修改：移除了“上传云相册”按钮
             Row({ space: 16 }) {
               Button('保存相册').backgroundColor('#F5F5F5').fontColor('#333').layoutWeight(1).height(48).borderRadius(24).fontSize(14).onClick(() => this.executeSave())
               Button('发送给好友').backgroundColor('#333').fontColor('#FFF').layoutWeight(1).height(48).borderRadius(24).fontSize(14).onClick(() => this.handleSystemShare())
