@@ -4,7 +4,8 @@ import { UserManager, UserInfo } from '../common/UserManager';
 import { EnergyManager } from '../common/EnergyManager';
 import { FortuneManager } from '../common/FortuneManager';
 import { promptAction } from '@kit.ArkUI';
-import common from '@ohos.app.ability.common'; // 🔴 1. 引入 common 模块
+import common from '@ohos.app.ability.common';
+import { BusinessError } from '@kit.BasicServicesKit';
 
 @Entry
 @Component
@@ -12,20 +13,21 @@ struct ProfilePage {
   @State currentUser: UserInfo | null = null;
   @State currentEnergy: number = 0;
   @State isVip: boolean = false;
-  @State birthDate: string = '未设置';
+  // 用于 DatePicker 的日期对象
+  @State selectedDate: Date = new Date('1995-01-01');
+  // 用于展示的字符串
+  @State birthDateText: string = '未设置';
   @State isPrivacyMode: boolean = false;
 
   private userManager = UserManager.getInstance();
   private energyManager = EnergyManager.getInstance();
   private fortuneManager = FortuneManager.getInstance();
 
-  // 🔴 2. 添加显式返回类型 Promise<void>
   async aboutToAppear(): Promise<void> {
     this.refreshData();
     this.isPrivacyMode = await this.fortuneManager.isPrivacyMode();
   }
 
-  // 🔴 2. 添加显式返回类型 void
   onPageShow(): void {
     this.refreshData();
   }
@@ -38,19 +40,21 @@ struct ProfilePage {
     })();
   }
 
-  // 模拟选择出生日期
+  // 🟢 修复2：使用 DatePickerDialog 选择出生年月
   handleEditBirth(): void {
-    promptAction.showDialog({
-      title: '设置出生年月',
-      message: '请输入您的出生年月 (如 1995-08-05)',
-      buttons: [
-        { text: '取消', color: '#999999' },
-        { text: '确定', color: '#FF69B4' }
-      ],
-    }, (err, data) => {
-      if (data.index === 1) {
-        this.birthDate = '1998.06.15';
-        promptAction.showToast({ message: '📅 生日已更新' });
+    DatePickerDialog.show({
+      start: new Date("1900-1-1"),
+      end: new Date(), // 结束时间为今天
+      selected: this.selectedDate,
+      onAccept: (value: DatePickerResult) => {
+        // value.year, value.month(0-11), value.day
+        if (value.year !== undefined && value.month !== undefined && value.day !== undefined) {
+          this.selectedDate.setFullYear(value.year, value.month, value.day);
+          // 格式化显示：YYYY-MM-DD
+          this.birthDateText = `${value.year}-${(value.month + 1).toString().padStart(2, '0')}-${value.day.toString().padStart(2, '0')}`;
+          promptAction.showToast({ message: '📅 生日已更新' });
+          // TODO: 如果需要，这里可以调用 FortuneManager 保存生日信息
+        }
       }
     });
   }
@@ -79,15 +83,29 @@ struct ProfilePage {
     });
   }
 
+  // 🟢 修复1：完善登录逻辑与反馈
   async handleLogin(): Promise<void> {
     try {
-      // 🔴 3. 修复 Context 类型报错：强制转换为 common.UIAbilityContext
+      // 显式获取 UIAbilityContext
       const context = getContext(this) as common.UIAbilityContext;
+
+      // 给用户一个反馈，防止点击没反应
+      promptAction.showToast({ message: '正在唤起华为登录...', duration: 1500 });
+
       const user = await this.userManager.login(context);
       this.currentUser = user;
       promptAction.showToast({ message: `欢迎回来，${user.nickname}` });
     } catch (e) {
-      // 登录失败或取消
+      const err = e as BusinessError;
+      console.error(`ProfilePage Login Error: ${err.code} - ${err.message}`);
+
+      // 根据错误码给出更友好的提示
+      let msg = '登录失败';
+      if (err.code === 1001502001) msg = '请先在系统设置中登录华为账号'; // 模拟器常见
+      else if (err.code === 1001500001) msg = '签名指纹未配置 (Client ID)';
+      else if (err.code === 12300001) msg = '系统服务不可用';
+
+      promptAction.showToast({ message: msg, duration: 3000 });
     }
   }
 
@@ -134,7 +152,7 @@ struct ProfilePage {
           Column() {
             if (this.currentUser) {
               Row() {
-                // 🔴 4. 修复资源引用报错：改用 $r('app.media.startIcon')
+                // 使用 resource 引用本地图片作为默认头像
                 Image(this.currentUser.avatar || $r('app.media.startIcon'))
                   .width(72).height(72).borderRadius(36)
                   .objectFit(ImageFit.Cover)
@@ -207,12 +225,10 @@ struct ProfilePage {
           Column() {
             Text('个人资料').fontSize(14).fontColor('#888').margin({ left: 8, bottom: 8 })
 
-            this.InfoItem('🎂', '出生年月', this.birthDate, () => this.handleEditBirth())
-            this.InfoItem('☁️', '数据云同步', this.currentUser ? '已就绪' : '未登录', () => {
-              // 跳转回首页触发同步，或者在这里复制同步逻辑
-              router.back();
-              promptAction.showToast({message: '请在首页点击云图标进行同步'});
-            })
+            // 🟢 修复：点击弹出 DatePicker 选择器
+            this.InfoItem('🎂', '出生年月', this.birthDateText, () => this.handleEditBirth())
+
+            // 🟢 修复3：已移除“数据云同步”按钮
 
             Text('设置').fontSize(14).fontColor('#888').margin({ left: 8, top: 12, bottom: 8 })
 
@@ -227,7 +243,7 @@ struct ProfilePage {
               }
               Toggle({ type: ToggleType.Switch, isOn: this.isPrivacyMode })
                 .selectedColor('#FF69B4')
-                .onChange((isOn) => this.togglePrivacy(isOn))
+                .onChange((isOn: boolean) => this.togglePrivacy(isOn))
             }
             .width('100%')
             .padding(20)
@@ -256,7 +272,7 @@ struct ProfilePage {
       .height('100%')
       .scrollBar(BarState.Off)
 
-      // 底部导航栏 (需要更新 BottomNavBar 支持 Profile tab)
+      // 底部导航栏
       BottomNavBar({ current: 'profile' })
     }
     .width('100%')

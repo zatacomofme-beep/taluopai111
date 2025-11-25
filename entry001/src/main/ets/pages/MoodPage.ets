@@ -3,6 +3,7 @@ import { promptAction, router } from '@kit.ArkUI';
 import { BottomNavBar } from '../common/BottomNavBar';
 import { FortuneManager, CardRecord } from '../common/FortuneManager';
 import { TAROT_DECK } from '../model/TarotData';
+import { CloudService } from '../common/CloudService'; // 🟢 引入云服务用于自动同步
 
 @Entry
 @Component
@@ -11,13 +12,19 @@ export struct MoodPage {
   @State moodNote: string = '';
   @State goldQuote: string = '';
   @State dailyTask: string = '';
-
-  // 📜 历史记录相关
   @State isHistoryOpen: boolean = false;
   @State historyList: CardRecord[] = [];
 
   private manager = FortuneManager.getInstance();
   private context = getContext(this) as common.UIAbilityContext;
+
+  // 🟢 核心：智能处理图片链接（网络或本地）
+  getCardImageSource(url: string): ResourceStr {
+    if (url.startsWith('http')) {
+      return url;
+    }
+    return $rawfile(url);
+  }
 
   async aboutToAppear() {
     await this.manager.init(this.context);
@@ -58,6 +65,9 @@ export struct MoodPage {
     await this.manager.setTodayMood(this.moodIndex, this.moodNote);
     promptAction.showToast({ message: '✨ 心情已记录', duration: 1200 });
 
+    // 🟢 自动同步：保存后立即在后台尝试同步到云端
+    CloudService.autoSave();
+
     this.historyList = await this.manager.getHistory();
 
     const streak = await this.manager.getMoodStreak();
@@ -86,7 +96,7 @@ export struct MoodPage {
     return this.historyList.filter(r => r.moodIndex !== undefined && r.moodIndex !== -1);
   }
 
-  // ✨✨✨ 全新设计的“心情画廊”网格布局 ✨✨✨
+  // 历史记录画廊 Sheet
   @Builder HistorySheetBuilder() {
     Column() {
       // 顶部把手
@@ -103,21 +113,22 @@ export struct MoodPage {
         Text(`${this.getFilteredHistory().length} 篇回忆`).fontSize(12).fontColor('#BBB')
       }.width('100%').padding({ left: 24, right: 24, bottom: 15 })
 
-      // 使用 Grid 替代 List，实现双列瀑布流效果
+      // 画廊网格
       Grid() {
         ForEach(this.getFilteredHistory(), (record: CardRecord) => {
           GridItem() {
             Column() {
               // 卡片主体
               Stack({ alignContent: Alignment.BottomEnd }) {
-                // 塔罗牌图片
-                Image($rawfile(this.getCardImage(record.cardId)))
+                // 🟢 修复：调用 getCardImageSource 加载网络图
+                Image(this.getCardImageSource(this.getCardImage(record.cardId)))
                   .width('100%')
-                  .aspectRatio(3/4) // 调整比例，让图片展示更完整
+                  .aspectRatio(3/4)
                   .objectFit(ImageFit.Cover)
                   .borderRadius({ topLeft: 12, topRight: 12 })
+                  .alt($rawfile('card_back.png')) // 加载占位图
 
-                // 🛠️ 修复：使用 Row 组件并应用 linearGradient 属性，替代错误的 LinearGradient 组件
+                // 渐变遮罩
                 Row()
                   .width('100%')
                   .height('40%')
@@ -127,7 +138,7 @@ export struct MoodPage {
                   })
                   .borderRadius({ bottomLeft: 0, bottomRight: 0 })
 
-                // 心情 Emoji "印章"
+                // 心情印章
                 Text(this.getMoodEmoji(record.moodIndex))
                   .fontSize(28)
                   .margin({ right: 8, bottom: 8 })
@@ -143,7 +154,6 @@ export struct MoodPage {
                   Text(this.formatDateShort(record.timestamp))
                     .fontSize(14).fontWeight(FontWeight.Bold).fontColor('#333')
                   Blank()
-                  // 小装饰点
                   Circle({ width: 4, height: 4 }).fill('#EEE')
                 }.width('100%').margin({ bottom: 6 })
 
@@ -159,12 +169,12 @@ export struct MoodPage {
               .backgroundColor(Color.White)
               .borderRadius({ bottomLeft: 12, bottomRight: 12 })
             }
-            .shadow({ radius: 15, color: 'rgba(0,0,0,0.05)', offsetY: 5 }) // 整体卡片阴影
-            .margin(5) // 格子之间的间距
+            .shadow({ radius: 15, color: 'rgba(0,0,0,0.05)', offsetY: 5 })
+            .margin(5)
           }
         })
       }
-      .columnsTemplate('1fr 1fr') // 双列布局
+      .columnsTemplate('1fr 1fr')
       .columnsGap(10)
       .rowsGap(15)
       .padding({ left: 15, right: 15, bottom: 20 })
@@ -182,7 +192,7 @@ export struct MoodPage {
       }
     }
     .width('100%')
-    .height('85%') // 增加高度，展示更多内容
+    .height('85%')
     .backgroundColor('#F7F8FA')
     .borderRadius({ topLeft: 24, topRight: 24 })
   }
@@ -240,7 +250,7 @@ export struct MoodPage {
                 .height(56)
                 .justifyContent(FlexAlign.Center)
                 .borderRadius(16)
-                .backgroundColor(this.moodIndex === index ? '#FFF0F5' : 'transparent') // 选中粉色背景
+                .backgroundColor(this.moodIndex === index ? '#FFF0F5' : 'transparent')
                 .border(this.moodIndex === index ? { width: 2, color: '#FF69B4' } : { width: 0 })
                 .animation({ duration: 200 })
                 .onClick(() => this.selectMood(index))
@@ -282,7 +292,7 @@ export struct MoodPage {
           .shadow({ radius: 20, color: 'rgba(0,0,0,0.03)', offsetY: 5 })
           .margin({ left: 16, right: 16 })
 
-          // 3. 每日指引卡片
+          // 3. 每日指引卡片 (如有)
           if (this.goldQuote || this.dailyTask) {
             Column() {
               Row() {
@@ -317,7 +327,7 @@ export struct MoodPage {
             .margin({ left: 16, right: 16 })
           }
 
-          Blank().height(100) // 底部垫高，防止内容被导航栏遮挡
+          Blank().height(100) // 底部垫高
         }
       }
       .width('100%')
@@ -328,7 +338,7 @@ export struct MoodPage {
       BottomNavBar({ current: 'mood' })
     }
     .bindSheet($$this.isHistoryOpen, this.HistorySheetBuilder(), {
-      height: SheetSize.LARGE, // 增加高度，适应画廊模式
+      height: SheetSize.LARGE,
       backgroundColor: Color.Transparent,
       blurStyle: BlurStyle.Thin,
       showClose: true

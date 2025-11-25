@@ -1,13 +1,7 @@
-// 路径: ets/widget/pages/DailyCardCard.ets
-// 桌面卡片 UI：展示今日抽到的牌
-
+// 路径: ets/dailycard/pages/DailyCardCard.ets
 @Entry
 @Component
 struct DailyCardCard {
-  /*
-   *LocalStorage 是卡片和 App 通信的桥梁。
-   * App 里把数据存进 LocalStorage，卡片就能读到。
-   */
   @LocalStorageProp('cardImage') cardImage: string = 'card_back.png';
   @LocalStorageProp('cardName') cardName: string = '今日指引';
   @LocalStorageProp('cardDesc') cardDesc: string = '点击抽取你的专属治愈';
@@ -18,23 +12,23 @@ struct DailyCardCard {
 
   build() {
     Stack() {
-      // 1. 背景图 (铺满)
-      Image($rawfile(this.cardImage))
+      // 🟢 修复：智能加载图片
+      // 如果是 http 链接，直接加载；如果是文件名，加载 rawfile
+      Image(this.cardImage.startsWith('http') ? this.cardImage : $rawfile(this.cardImage))
         .width('100%')
         .height('100%')
         .objectFit(ImageFit.Cover)
         .borderRadius(12)
+        .alt($rawfile('card_back.png')) // 加载失败显示背面
 
-      // 2. 黑色半透明遮罩 (为了让文字更清晰)
       Column()
         .width('100%')
         .height('100%')
         .backgroundColor('rgba(0,0,0,0.3)')
         .borderRadius(12)
 
-      // 3. 文字内容
       Column() {
-        Blank() // 把文字推到底部
+        Blank()
 
         Text(this.cardName)
           .fontSize(14)
@@ -64,10 +58,9 @@ struct DailyCardCard {
     .width('100%')
     .height('100%')
     .onClick(() => {
-      // 点击卡片，唤起主 App
       postCardAction(this, {
         "action": "router",
-        "abilityName": "EntryAbility",
+        "abilityName": "Entry001Ability",
         "params": {
           "targetPage": "index"
         }

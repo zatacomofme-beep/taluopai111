@@ -1,6 +1,4 @@
 import { FortuneManager, CardRecord } from '../common/FortuneManager';
-import { systemShare } from '@kit.ShareKit';
-import { image } from '@kit.ImageKit';
 import { fileIo as fs, fileUri } from '@kit.CoreFileKit';
 import { uniformTypeDescriptor as utd } from '@kit.ArkData';
 import { TarotCard, TAROT_DECK } from '../model/TarotData';
@@ -13,8 +11,14 @@ import { ImageSaver } from '../common/ImageSaver';
 import { EnergyManager } from '../common/EnergyManager';
 import { ShareHelper } from '../common/ShareHelper';
 import { CloudService } from '../common/CloudService';
-import { UserManager, UserInfo } from '../common/UserManager'; // 确保 UserManager.ets 文件存在
+import { UserManager, UserInfo } from '../common/UserManager';
 import { BusinessError } from '@kit.BasicServicesKit';
+import { AIService } from '../common/AIService';
+
+// 1. 定义云端资源常量
+const OBS_PATH = 'https://taluopai.obs.cn-southwest-2.myhuaweicloud.com/tarot_cards/';
+const CARD_BACK_URL = `${OBS_PATH}card_back.png`;
+const QR_CODE_URL = `${OBS_PATH}qr_code.png`;
 
 @Entry
 @Component
@@ -67,13 +71,10 @@ struct Index {
   // === 🏛️ 弹窗状态控制 ===
   @State isGallerySheetOpen: boolean = false;
   @State isEnergySheetOpen: boolean = false;
-  @State isShareSheetOpen: boolean = false;
 
   // === 数据 ===
   @State galleryList: CardRecord[] = [];
   @State collectionProgress: number = 0;
-  @State isPosterReady: boolean = false;
-  @State shareTheme: string = 'soft';
   @State stickers: string[] = [];
   @State todayDate: string = "";
   @State todayWeek: string = "";
@@ -94,18 +95,25 @@ struct Index {
   @State currentEnergy: number = 0;
 
   // === 👤 用户信息 ===
-  @State currentUserInfo: UserInfo | null = null; // 👈 新增：存储当前用户信息
+  @State currentUserInfo: UserInfo | null = null;
 
   private manager = FortuneManager.getInstance();
   private energyManager = EnergyManager.getInstance();
   private userManager = UserManager.getInstance();
   private context = getContext(this) as common.UIAbilityContext;
-  private POSTER_ID = 'poster_component_id';
 
   private asyncAnimateTo(duration: number, curve: Curve | string | ICurve, updateFn: () => void): Promise<void> {
     return new Promise((resolve) => {
       animateTo({ duration: duration, curve: curve, onFinish: resolve }, updateFn);
     });
+  }
+
+  // 智能图片源处理：兼容网络图片和本地 rawfile
+  getCardImageSource(url: string): ResourceStr {
+    if (url && url.startsWith('http')) {
+      return url;
+    }
+    return $rawfile(url);
   }
 
   async aboutToAppear() {
@@ -117,7 +125,6 @@ struct Index {
     this.initDate();
     this.startGuideAnimation();
 
-    // 获取今日心情数据
     const mood = await this.manager.getTodayMood();
     this.moodIndex = mood.mood;
     this.moodNote = mood.note;
@@ -127,7 +134,6 @@ struct Index {
     this.dailyTask = aff.task;
     this.privacyMode = await this.manager.isPrivacyMode();
 
-    // 👈 新增：初始化时检查登录状态
     this.refreshLoginStatus();
   }
 
@@ -137,7 +143,6 @@ struct Index {
       const mood = await this.manager.getTodayMood();
       this.moodIndex = mood.mood;
     })();
-    // 👈 每次页面显示也刷新登录状态
     this.refreshLoginStatus();
   }
 
@@ -145,7 +150,6 @@ struct Index {
     this.currentEnergy = this.energyManager.getEnergy();
   }
 
-  // 👈 新增：刷新登录状态方法
   refreshLoginStatus() {
     this.currentUserInfo = this.userManager.getCurrentUser();
   }
@@ -173,6 +177,19 @@ struct Index {
     } else {
       this.resetUI();
     }
+
+    // 🟢 启动时尝试自动同步（不阻塞 UI）
+    void (async () => {
+      const restored = await CloudService.autoRestore();
+      if (restored) {
+        // 如果有新数据恢复，重新刷新状态
+        const newSavedCard = await this.manager.checkTodayCard();
+        if (newSavedCard && !this.currentCard) {
+          this.checkState();
+        }
+        promptAction.showToast({ message: '☁️ 数据已从云端同步' });
+      }
+    })();
   }
 
   resetUI() {
@@ -321,6 +338,9 @@ struct Index {
 
     if (this.currentCard) {
       await this.manager.saveDrawResult(this.currentCard, this.rarityColor);
+
+      // 🟢 事件触发：抽完卡后，自动备份到云端
+      CloudService.autoSave();
     }
 
     await this.asyncAnimateTo(500, curves.springMotion(0.6, 0.7), () => {
@@ -378,95 +398,54 @@ struct Index {
     animateTo({ duration: 600 }, () => { this.showResultText = true; });
   }
 
+  // 🟢 跳转到分享预览页
   handleShare() {
     if (!this.currentCard) return;
-    this.isShareSheetOpen = false;
-    this.isGallerySheetOpen = false;
-    this.isPosterReady = false;
-    animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
-      this.isShareSheetOpen = true;
-    });
-    setTimeout(() => { this.isPosterReady = true; }, 140);
-  }
-
-  async handleSystemShare() {
-    try {
-      promptAction.showToast({ message: '正在生成...', duration: 1000 });
-      await ShareHelper.snapshotAndShare(this.context, this.POSTER_ID);
-    } catch (err) {
-      const error = err as BusinessError;
-      console.error(`Share failed: ${error.message}`);
-      promptAction.showToast({ message: '分享失败，请重试', duration: 2000 });
-    }
-  }
-
-  async executeSave() {
-    try {
-      const ok = await this.ensureAlbumPermissions();
-      if (!ok) { promptAction.showToast({ message: '需要相册权限', duration: 2500 }); return; }
-      const pixelMap = await componentSnapshot.get(this.POSTER_ID);
-      await ImageSaver.saveToAlbum(this.context, pixelMap);
-      this.isShareSheetOpen = false;
-    } catch (err) {
-      const error = err as BusinessError;
-      console.error(`Save failed: ${error.message}`);
-      promptAction.showToast({ message: '保存失败', duration: 2000 });
-    }
-  }
-
-  async ensureAlbumPermissions(): Promise<boolean> {
-    try {
-      const atManager = abilityAccessCtrl.createAtManager();
-      const result = await atManager.requestPermissionsFromUser(this.context, ['ohos.permission.READ_IMAGEVIDEO', 'ohos.permission.WRITE_IMAGEVIDEO']);
-      return Array.isArray(result.authResults) ? result.authResults.every(v => v === 0) : true;
-    } catch (err) {
-      return false;
-    }
-  }
-
-  async setMood(index: number) {
-    this.moodIndex = index;
-    await this.manager.setTodayMood(index, this.moodNote);
-    promptAction.showToast({ message: '✨ 心情已记录', duration: 1200 });
-  }
-
-  togglePrivacyMode() {
-    this.privacyMode = !this.privacyMode;
-    this.manager.setPrivacyMode(this.privacyMode);
-    promptAction.showToast({ message: this.privacyMode ? '🔒 私密模式已开启' : '🔓 私密模式已关闭' });
-  }
-  openBreathingGuide() { this.isBreathingSheetOpen = true; }
-
-  async loadGalleryData() {
-    this.isShareSheetOpen = false;
-    this.isEnergySheetOpen = false;
-    this.galleryList = await this.manager.getGallery();
-    this.collectionProgress = Math.round((this.galleryList.length / TAROT_DECK.length) * 100);
-    animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
-      this.isGallerySheetOpen = true;
+    router.pushUrl({
+      url: 'pages/SharePreviewPage',
+      params: {
+        card: this.currentCard,
+        todayDate: this.todayDate,
+        todayWeek: this.todayWeek,
+        goldQuote: this.goldQuote,
+        privacyMode: this.privacyMode
+      }
     });
   }
-  isCollected(id: number): boolean { return this.galleryList.some(record => record.cardId === id); }
 
-  getCardRarityColor(id: number): string {
-    const record = this.galleryList.find(r => r.cardId === id);
-    return record ? record.rarityColor : 'rgba(0,0,0,0.1)';
+  async handleUserClick() {
+    if (this.currentUserInfo) {
+      promptAction.showDialog({
+        title: '账号管理',
+        message: `当前登录：${this.currentUserInfo.nickname}\n是否退出登录？`,
+        buttons: [
+          { text: '退出登录', color: '#FF0000' },
+          { text: '取消', color: '#999999' }
+        ]
+      }, (err, data) => {
+        if (data.index === 0) {
+          this.userManager.logout();
+          this.refreshLoginStatus();
+          promptAction.showToast({ message: '已退出登录' });
+        }
+      });
+    } else {
+      try {
+        const user = await this.userManager.login(this.context);
+        this.refreshLoginStatus();
+        promptAction.showToast({ message: `欢迎，${user.nickname}` });
+      } catch (e) {
+      }
+    }
   }
 
-  getThemePrimaryTextColor(): string { return this.shareTheme === 'star' ? '#EEEEEE' : '#333333'; }
-  getThemeSecondaryTextColor(): string { return this.shareTheme === 'star' ? '#BBBBBB' : '#888888'; }
-
-  // 🚀 改写后的云同步逻辑：集成华为登录
   async handleCloudSync() {
-    // 1. 检查本地是否已登录
     let currentUser = this.userManager.getCurrentUser();
 
     if (!this.userManager.isLoggedIn()) {
       try {
         promptAction.showToast({ message: '正在连接华为账号...', duration: 1500 });
-        // 调用 UserManager 执行登录（包含静默 + 交互重试）
         currentUser = await this.userManager.login(this.context);
-        // 👈 登录成功后，刷新本地状态，触发 UI 更新
         this.refreshLoginStatus();
         promptAction.showToast({ message: `欢迎回来，${currentUser.nickname}`, duration: 2000 });
       } catch (err) {
@@ -482,7 +461,6 @@ struct Index {
     const realUserId = currentUser.userId;
     const realToken = currentUser.token;
 
-    // 2. 连接服务器逻辑 (使用真实的 ID 和 Token)
     promptAction.showToast({ message: '正在连接云端...', duration: 1000 });
     const isOnline = await CloudService.checkConnection();
     const statusEmoji = isOnline ? '🟢' : '🔴';
@@ -504,7 +482,6 @@ struct Index {
       if (data.index === 0) {
         promptAction.showToast({ message: '正在上传备份...', duration: 2000 });
         const allData = await this.manager.exportAllData();
-        // 传递真实用户数据给后端
         const success = await CloudService.backupData(realUserId, realToken, allData);
         if (success) {
           promptAction.showToast({ message: '✅ 备份成功！' });
@@ -513,7 +490,6 @@ struct Index {
         }
       } else {
         promptAction.showToast({ message: '正在下载恢复...', duration: 2000 });
-        // 传递真实用户数据给后端
         const jsonStr = await CloudService.restoreData(realUserId, realToken);
         if (jsonStr) {
           const ok = await this.manager.importData(jsonStr);
@@ -531,34 +507,28 @@ struct Index {
     });
   }
 
-  // 👈 新增：处理用户点击头像的逻辑
-  async handleUserClick() {
-    if (this.currentUserInfo) {
-      // 已登录：询问是否退出
-      promptAction.showDialog({
-        title: '账号管理',
-        message: `当前登录：${this.currentUserInfo.nickname}\n是否退出登录？`,
-        buttons: [
-          { text: '退出登录', color: '#FF0000' },
-          { text: '取消', color: '#999999' }
-        ]
-      }, (err, data) => {
-        if (data.index === 0) {
-          this.userManager.logout();
-          this.refreshLoginStatus();
-          promptAction.showToast({ message: '已退出登录' });
-        }
-      });
-    } else {
-      // 未登录：触发登录流程
-      try {
-        const user = await this.userManager.login(this.context);
-        this.refreshLoginStatus();
-        promptAction.showToast({ message: `欢迎，${user.nickname}` });
-      } catch (e) {
-        // 登录取消或失败，不做处理
-      }
-    }
+  async handleAIAnalyze() {
+    // ... 调用 SpreadPage 同款的 AI 分析逻辑，或者跳转到 SpreadPage
+    router.pushUrl({ url: 'pages/SpreadPage' });
+  }
+
+  // 🟢 补回 loadGalleryData
+  async loadGalleryData() {
+    this.isGallerySheetOpen = true;
+    this.isEnergySheetOpen = false;
+    this.galleryList = await this.manager.getGallery();
+    this.collectionProgress = Math.round((this.galleryList.length / TAROT_DECK.length) * 100);
+  }
+
+  // 🟢 补回 isCollected
+  isCollected(id: number): boolean {
+    return this.galleryList.some(record => record.cardId === id);
+  }
+
+  // 🟢 补回 getCardRarityColor
+  getCardRarityColor(id: number): string {
+    const record = this.galleryList.find(r => r.cardId === id);
+    return record ? record.rarityColor : 'rgba(0,0,0,0.1)';
   }
 
   @Builder GallerySheetBuilder() {
@@ -581,8 +551,10 @@ struct Index {
             Column() {
               if (this.isCollected(card.id)) {
                 Stack() {
-                  Image($rawfile(card.image)).width('100%').aspectRatio(2/3).borderRadius(10)
+                  Image(this.getCardImageSource(card.image))
+                    .width('100%').aspectRatio(2/3).borderRadius(10)
                     .shadow({ radius: 8, color: this.getCardRarityColor(card.id), offsetY: 2 })
+                    .alt($rawfile('card_back.png'))
                 }
                 Text(card.name).fontSize(12).fontColor('#333').fontWeight(FontWeight.Medium).margin({ top: 8 })
               } else {
@@ -627,72 +599,18 @@ struct Index {
     .width('100%').height('50%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
   }
 
-  @Builder ShareSheetBuilder() {
-    if (!this.currentCard) {
-      Column().height(100)
-    } else {
-      Column() {
-        Row({ space: 8 }) {
-          Button('轻柔').onClick(() => { this.shareTheme = 'soft'; }).backgroundColor(this.shareTheme === 'soft' ? '#333' : '#EEE').fontColor(this.shareTheme === 'soft' ? '#FFF' : '#000').height(32).fontSize(12)
-          Button('极简').onClick(() => { this.shareTheme = 'minimal'; }).backgroundColor(this.shareTheme === 'minimal' ? '#333' : '#EEE').fontColor(this.shareTheme === 'minimal' ? '#FFF' : '#000').height(32).fontSize(12)
-          Button('星空').onClick(() => { this.shareTheme = 'star'; }).backgroundColor(this.shareTheme === 'star' ? '#333' : '#EEE').fontColor(this.shareTheme === 'star' ? '#FFF' : '#000').height(32).fontSize(12)
-        }.margin({ top: 15, bottom: 15 })
-
-        Column() {
-          Row() {
-            Column() {
-              Text(this.todayDate).fontSize(18).fontWeight(FontWeight.Bold).fontColor(this.getThemePrimaryTextColor())
-              Text(this.todayWeek).fontSize(12).fontColor(this.getThemeSecondaryTextColor())
-            }.alignItems(HorizontalAlign.Start)
-            Blank()
-            Text("治愈之书").fontSize(14).fontColor('#FF69B4').fontWeight(FontWeight.Medium)
-          }.width('100%').padding({ left: 16, right: 16, top: 16 })
-
-          Image($rawfile(this.currentCard.image))
-            .width('100%').aspectRatio(2/3).borderRadius(12).margin({ top: 12 })
-            .shadow({ radius: 10, color: 'rgba(0,0,0,0.1)', offsetY: 5 })
-
-          Column() {
-            Text(this.currentCard.name).fontSize(20).fontWeight(FontWeight.Bold).fontColor(this.getThemePrimaryTextColor()).margin({ top: 16 })
-            Text(this.currentCard.meaning).fontSize(14).fontColor(this.getThemeSecondaryTextColor()).margin({ top: 4, bottom: 12 })
-
-            if (!this.privacyMode) {
-              Text(this.currentCard.desc).fontSize(14).fontColor(this.getThemePrimaryTextColor()).opacity(0.8).textAlign(TextAlign.Center).lineHeight(20)
-              if (this.goldQuote) {
-                Text(`“ ${this.goldQuote} ”`).fontSize(13).fontColor('#FF69B4').fontStyle(FontStyle.Italic).margin({ top: 12 })
-              }
-            } else {
-              Text("🔒 私密模式").fontSize(12).fontColor(this.getThemeSecondaryTextColor()).margin({ top: 10 })
-            }
-          }.padding(16)
-
-          Row() {
-            Text("扫码获取你的治愈卡片").fontSize(10).fontColor(this.getThemeSecondaryTextColor())
-            Blank()
-            Image($rawfile('qr_code.png')).width(40).height(40).opacity(0.8)
-          }.width('100%').padding({ left: 16, right: 16, bottom: 16 })
-
-        }
-        .width('88%')
-        .backgroundColor(this.shareTheme === 'soft' ? Color.White : (this.shareTheme === 'minimal' ? '#F7F7F7' : '#1A1A2E'))
-        .borderRadius(16)
-        .shadow({ radius: 20, color: 'rgba(0,0,0,0.1)', offsetY: 10 })
-        .id(this.POSTER_ID)
-      }
-      .width('100%')
-    }
-  }
-
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
         Column() {
           Row() {
-            // 👈 修改：左侧显示用户头像或登录提示
+            // 左侧显示用户头像或登录提示
             Row() {
               if (this.currentUserInfo && this.currentUserInfo.avatar) {
-                Image(this.currentUserInfo.avatar)
+                // 头像使用 getCardImageSource 兼容本地/网络
+                Image(this.getCardImageSource(this.currentUserInfo.avatar))
                   .width(32).height(32).borderRadius(16).margin({ right: 8 })
+                  .alt($r('app.media.startIcon'))
               } else {
                 // 未登录显示默认图标
                 Text('👤').fontSize(24).margin({ right: 8 })
@@ -712,11 +630,23 @@ struct Index {
 
             Blank()
 
-            // ☁️ 云同步入口 (已绑定新逻辑)
+            // 云同步入口
+            // 🟢 修复：保留云同步入口，但逻辑已改为自动同步的触发/提示
             Button({ type: ButtonType.Circle }) { Text('☁️').fontSize(16) }
             .width(36).height(36).backgroundColor('rgba(255,255,255,0.8)')
             .margin({ right: 12 })
-            .onClick(() => this.handleCloudSync())
+            .onClick(() => {
+              // 点击时手动触发一次同步检查
+              promptAction.showToast({ message: '正在同步云端数据...', duration: 1500 });
+              CloudService.autoSave();
+              void (async () => {
+                const restored = await CloudService.autoRestore();
+                if(restored) {
+                  this.checkState();
+                  promptAction.showToast({ message: '✅ 同步完成' });
+                }
+              })();
+            })
 
             Row() {
               Text('⚡').fontSize(14)
@@ -742,18 +672,26 @@ struct Index {
                 .blur(20)
             }
 
-            Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
+            // 装饰性牌堆使用 CARD_BACK_URL
+            Image(CARD_BACK_URL).width('100%').height('100%').borderRadius(16)
               .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset1 }).rotate({ z: 1, angle: this.deckAngle1 }).opacity(this.deckOpacity)
-            Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
-              .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset2 }).rotate({ z: 1, angle: this.deckAngle2 }).opacity(this.deckOpacity)
+              .alt($rawfile('card_back.png'))
 
-            Image($rawfile('card_back.png')).width('100%').height('100%').borderRadius(16)
+            Image(CARD_BACK_URL).width('100%').height('100%').borderRadius(16)
+              .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset2 }).rotate({ z: 1, angle: this.deckAngle2 }).opacity(this.deckOpacity)
+              .alt($rawfile('card_back.png'))
+
+            // 翻转动画的背面使用 CARD_BACK_URL
+            Image(CARD_BACK_URL).width('100%').height('100%').borderRadius(16)
               .rotate({ x: 0, y: 1, z: 0, angle: this.angle }).opacity(this.angle < 90 ? 1 : 0)
+              .alt($rawfile('card_back.png'))
 
             if (this.currentCard) {
-              Image($rawfile(this.currentCard.image))
+              // 使用通用方法获取图片
+              Image(this.getCardImageSource(this.currentCard.image))
                 .width('100%').height('100%').borderRadius(16)
                 .rotate({ x: 0, y: 1, z: 0, angle: this.angle - 180 }).opacity(this.angle >= 90 ? 1 : 0)
+                .alt($rawfile('card_back.png')) // 添加加载占位图
             }
 
             if (this.currentCard && this.rarityLevel >= 6 && this.isFlipped) {
@@ -780,10 +718,24 @@ struct Index {
               Text(this.currentCard.name_en).fontSize(14).fontColor('#AAAAAA').fontStyle(FontStyle.Italic).margin({bottom: 16})
               Text(this.currentCard.desc).fontSize(16).fontColor('#555555').textAlign(TextAlign.Center).lineHeight(26).padding({ left: 20, right: 20 }).opacity(0.9)
               Divider().color('#F0F0F0').width('80%').margin({top: 24, bottom: 24})
-              Row({ space: 12 }) {
-                Button("✨ 分享").backgroundColor('#333333').fontColor(Color.White).height(44).layoutWeight(1).borderRadius(22).onClick(() => this.handleShare())
-                Button("🔮 深度解读").backgroundColor('#E0F7FA').fontColor('#006064').height(44).layoutWeight(1).borderRadius(22).onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
-              }.width('90%').margin({ bottom: 12 })
+
+              Button("✨ 分享")
+                .backgroundColor('#333333')
+                .fontColor(Color.White)
+                .height(44)
+                .width('90%')
+                .borderRadius(22)
+                .margin({ bottom: 12 })
+                .onClick(() => this.handleShare())
+
+              Button("🔮 深度解读")
+                .backgroundColor('#E0F7FA')
+                .fontColor('#006064')
+                .height(44)
+                .width('90%')
+                .borderRadius(22)
+                .margin({ bottom: 12 })
+                .onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
 
               if (this.moodIndex === -1) {
                 Button("📝 记录此刻心情")
@@ -838,27 +790,6 @@ struct Index {
           .width('100%')
           .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
           .zIndex(101).position({ y: '50%' }).constraintSize({ maxWidth: 480 })
-        }.width('100%').height('100%').zIndex(200)
-      }
-
-      if (this.isShareSheetOpen) {
-        Column() {
-          Column()
-            .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.4)')
-            .onClick(() => { animateTo({ duration: 300, curve: Curve.EaseOut }, () => { this.isShareSheetOpen = false; }); })
-            .transition({ opacity: 0 })
-            .zIndex(100)
-
-          Column() {
-            this.ShareSheetBuilder()
-            Row({ space: 16 }) {
-              Button('保存相册').backgroundColor('#F5F5F5').fontColor('#333').layoutWeight(1).height(48).borderRadius(24).fontSize(14).onClick(() => this.executeSave())
-              Button('发送给好友').backgroundColor('#333').fontColor('#FFF').layoutWeight(1).height(48).borderRadius(24).fontSize(14).onClick(() => this.handleSystemShare())
-            }.width('90%').margin({ top: 20, bottom: 30 })
-          }
-          .width('100%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
-          .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
-          .zIndex(101).position({ y: '30%' }).constraintSize({ maxWidth: 480 })
         }.width('100%').height('100%').zIndex(200)
       }
     }

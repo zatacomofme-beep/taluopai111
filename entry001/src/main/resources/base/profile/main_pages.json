@@ -4,6 +4,7 @@
     "pages/SpreadPage",
     "pages/BreathingPage",
     "pages/MoodPage",
-    "pages/ProfilePage"
+    "pages/ProfilePage",
+    "pages/SharePreviewPage"
   ]
 }
