@@ -8,23 +8,11 @@
       "phone",
       "tablet"
     ],
+    // 🔴 修复：移除了敏感的相册读写权限，只保留网络权限
+    // 这样就能解决安装报错的问题
     "requestPermissions": [
       {
         "name": "ohos.permission.INTERNET"
-      },
-      {
-        "name": "ohos.permission.GET_NETWORK_INFO"
-      },
-      // 🔴 必须添加：读取图片的权限（头像、相册）
-      {
-        "name": "ohos.permission.READ_IMAGEVIDEO",
-        "reason": "$string:perm_read_image_desc",
-        "usedScene": { "when": "inuse" }
-      },
-      {
-        "name": "ohos.permission.WRITE_IMAGEVIDEO",
-        "reason": "$string:perm_write_image_desc",
-        "usedScene": { "when": "inuse" }
       }
     ],
     "deliveryWithInstall": true,
@@ -79,13 +67,11 @@
         ]
       }
     ],
-    // 🔴 核心修改：添加 Account Kit 必须的 Client ID
+    // 🔴 已填入您的真实 Client ID
     "metadata": [
       {
         "name": "client_id",
-        // ⚠️ 下面的数字必须替换为你自己在华为开发者后台申请的真实 ID
-        // 如果你暂时没有，可以先试用这个通用的测试 ID (不保证长期有效，建议自己申请)
-        "value": "111676365"
+        "value": "6917590358067086504"
       }
     ]
   }
