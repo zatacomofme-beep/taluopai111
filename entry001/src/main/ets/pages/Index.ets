@@ -101,6 +101,10 @@ struct Index {
   @State godRayRotate: number = 0; // 新增：圣光旋转角度
   @State godRayOpacity: number = 0; // 新增：圣光透明度
 
+  // === 🖼️ 边框动画状态 ===
+  @State borderProgress: number = 0; // 0-4: 0-1(Top), 1-2(Right), 2-3(Bottom), 3-4(Left)
+  @State borderOpacity: number = 0;
+
   // === 🏛️ 弹窗状态控制 ===
   @State isGallerySheetOpen: boolean = false;
   @State isEnergySheetOpen: boolean = false;
@@ -148,7 +152,7 @@ struct Index {
   // 智能图片源处理：兼容网络图片和本地 rawfile
   getCardImageSource(url: string): ResourceStr {
     // 尝试根据当前牌组解析动态 URL
-    const finalUrl = resolveDeckImage(url);
+    const finalUrl = resolveDeckImage(url, this.currentDeckFolder);
     
     if (finalUrl && finalUrl.startsWith('http')) {
       return finalUrl;
@@ -218,6 +222,10 @@ struct Index {
       this.showResultText = true;
       this.startBreathingAnimation();
       
+      // 恢复边框状态
+      this.borderProgress = 4;
+      this.borderOpacity = 1;
+      
       // 恢复阴影效果
       this.shadowColor = this.rarityLevel >= 5 ? this.rarityColor : 'rgba(0,0,0,0.2)';
       this.shadowRadius = this.rarityLevel >= 5 ? 30 : 10;
@@ -249,6 +257,9 @@ struct Index {
     this.rarityColor = 'rgba(0,0,0,0.15)';
     this.stopBreathingAnimation();
     this.mainReset();
+    // 重置边框动画
+    this.borderProgress = 0;
+    this.borderOpacity = 0;
   }
 
   mainReset() {
@@ -263,6 +274,77 @@ struct Index {
     this.isAnimating = false;
     this.godRayOpacity = 0;
     this.godRayRotate = 0;
+  }
+
+  @Builder ComplexBorderBuilder() {
+    Stack() {
+      // 1. 顶部线条 (从左到右)
+      Row()
+        .width(`${Math.min(Math.max(this.borderProgress, 0), 1) * 92}%`) // 留出角的位置
+        .height(3)
+        .backgroundColor('#FFD700') // 金色
+        .shadow({ radius: 2, color: '#AA8800', offsetY: 0 })
+        .position({ x: '4%', y: 8 }) // 内缩一点
+
+      // 2. 右侧线条 (从上到下)
+      Column()
+        .height(`${Math.min(Math.max(this.borderProgress - 1, 0), 1) * 92}%`)
+        .width(3)
+        .backgroundColor('#FFD700')
+        .shadow({ radius: 2, color: '#AA8800', offsetY: 0 })
+        .position({ x: '94%', y: '4%' }) // x = 100% - 8px - width
+
+      // 3. 底部线条 (从右到左 - 这里简化为从左到右显示，视觉上一样，如果需要方向感可以反转对其方式)
+      // 为了实现从右到左的绘制感，我们可以让它右对齐
+      Row()
+        .width(`${Math.min(Math.max(this.borderProgress - 2, 0), 1) * 92}%`)
+        .height(3)
+        .backgroundColor('#FFD700')
+        .shadow({ radius: 2, color: '#AA8800', offsetY: 0 })
+        .position({ x: '4%', y: '94%' }) // y = 100% - 8px - height
+        // 注意：ArkTS Row 默认左对齐，如果想从右边长出来，需要嵌套在 Stack 且 alignment: TopEnd，或者用 direction
+        // 这里简单处理，统一顺时针感觉
+
+      // 4. 左侧线条 (从下到上)
+      Column()
+        .height(`${Math.min(Math.max(this.borderProgress - 3, 0), 1) * 92}%`)
+        .width(3)
+        .backgroundColor('#FFD700')
+        .shadow({ radius: 2, color: '#AA8800', offsetY: 0 })
+        .position({ x: 8, y: '4%' })
+
+      // 5. 四角装饰 (当进度到达对应阶段时显现)
+      if (this.borderProgress > 0.1) {
+        Text("✦").fontSize(16).fontColor('#FFD700').position({ x: 2, y: 2 })
+          .transition({ type: TransitionType.Insert, opacity: 0, scale: { x: 0, y: 0 } })
+      }
+      if (this.borderProgress > 1.1) {
+        Text("✦").fontSize(16).fontColor('#FFD700').position({ x: '92%', y: 2 })
+          .transition({ type: TransitionType.Insert, opacity: 0, scale: { x: 0, y: 0 } })
+      }
+      if (this.borderProgress > 2.1) {
+        Text("✦").fontSize(16).fontColor('#FFD700').position({ x: '92%', y: '92%' })
+          .transition({ type: TransitionType.Insert, opacity: 0, scale: { x: 0, y: 0 } })
+      }
+      if (this.borderProgress > 3.1) {
+        Text("✦").fontSize(16).fontColor('#FFD700').position({ x: 2, y: '92%' })
+          .transition({ type: TransitionType.Insert, opacity: 0, scale: { x: 0, y: 0 } })
+      }
+      
+      // 6. 内框装饰线 (细线，固定显示，随透明度渐变)
+      Stack() {
+        Rect().width('100%').height('100%').fill('transparent')
+          .stroke('#AAFFD700').strokeWidth(1)
+      }
+      .width('85%').height('90%')
+      .opacity(this.borderProgress > 3.5 ? 1 : 0)
+      .animation({ duration: 500 })
+
+    }
+    .width('100%')
+    .height('100%')
+    .hitTestBehavior(HitTestMode.None)
+    .opacity(this.borderOpacity)
   }
 
   @Builder GodRayBuilder() {
@@ -530,6 +612,13 @@ struct Index {
     });
 
     this.isFlipped = true;
+
+    // 🌟 启动边框绘制动画
+    this.borderOpacity = 1;
+    animateTo({ duration: 2500, curve: Curve.EaseOut }, () => {
+      this.borderProgress = 4;
+    });
+
     this.isAnimating = false; // 解锁
     this.startBreathingAnimation();
 
@@ -886,6 +975,17 @@ struct Index {
                 .width('100%').height('100%').borderRadius(16)
                 .rotate({ x: 0, y: 1, z: 0, angle: this.angle - 180 }).opacity(this.angle >= 90 ? 1 : 0)
                 .alt($rawfile('card_back.png')) // 添加加载占位图
+              
+              // 🌟 绘制边框动画 (跟随卡牌翻转)
+              if (this.isFlipped) {
+                Column() {
+                  this.ComplexBorderBuilder()
+                }
+                .width('100%').height('100%')
+                .rotate({ x: 0, y: 1, z: 0, angle: this.angle - 180 })
+                .opacity(this.angle >= 90 ? 1 : 0)
+                .hitTestBehavior(HitTestMode.None)
+              }
             }
 
             if (this.currentCard && this.rarityLevel >= 6 && this.isFlipped) {

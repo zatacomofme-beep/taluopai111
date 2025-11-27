@@ -1,6 +1,6 @@
 // 治愈之书 - 核心数据模型
 
-import { AppStorage } from '@kit.ArkUI';
+
 
 export interface TarotCard {
   id: number;
@@ -17,7 +17,8 @@ export interface DeckTheme {
   name: string;
   desc: string;
   folder: string; // OBS 文件夹名，例如 "default/"
-  price: number; // 价格 (心力值)
+  price: number; // 价格 (人民币，单位：元)
+  productId: string; // IAP 商品 ID
   preview: string; // 预览图文件名
   isLocked: boolean; // 初始状态 (实际状态需结合用户购买记录)
 }
@@ -36,8 +37,9 @@ export const DECK_LIST: DeckTheme[] = [
     id: 'default',
     name: '治愈绘本',
     desc: '温暖治愈的绘本风格，适合日常情感疗愈。',
-    folder: 'impasto%20style/', // 默认文件夹 (请确保OBS中有此文件夹)
+    folder: 'impasto%20style/', // 默认文件夹
     price: 0,
+    productId: 'deck_impasto_001',
     preview: 'card_0.png',
     isLocked: false
   },
@@ -46,7 +48,8 @@ export const DECK_LIST: DeckTheme[] = [
     name: '经典韦特',
     desc: '神秘的经典韦特塔罗，符号象征丰富。',
     folder: 'classic/', // 示例文件夹
-    price: 60,
+    price: 12.00,
+    productId: 'deck_classic_002',
     preview: 'card_0.png',
     isLocked: true
   },
@@ -55,7 +58,8 @@ export const DECK_LIST: DeckTheme[] = [
     name: '水彩梦境',
     desc: '轻盈通透的水彩质感，如梦似幻。',
     folder: 'watercolor/', // 示例文件夹
-    price: 88,
+    price: 18.00,
+    productId: 'deck_watercolor_003',
     preview: 'card_0.png',
     isLocked: true
   }
@@ -70,7 +74,7 @@ function getImageUrl(filename: string): string {
 }
 
 // 🔄 核心：动态解析当前牌组图片
-export function resolveDeckImage(originalUrl: string): string {
+export function resolveDeckImage(originalUrl: string, currentFolder: string): string {
   if (!originalUrl) return originalUrl;
   if (USE_LOCAL_IMAGES) return originalUrl;
   
@@ -79,9 +83,9 @@ export function resolveDeckImage(originalUrl: string): string {
     const filename = originalUrl.split('/').pop();
     if (!filename) return originalUrl;
     
-    // 从 AppStorage 获取当前选中的牌组文件夹 (默认为第一个)
-    const currentFolder = AppStorage.Get<string>('CurrentDeckFolder') || DECK_LIST[0].folder;
-    return `${OBS_ROOT_URL}${currentFolder}${filename}`;
+    // 使用传入的文件夹路径 (默认为第一个牌组文件夹)
+    const targetFolder = currentFolder || DECK_LIST[0].folder;
+    return `${OBS_ROOT_URL}${targetFolder}${filename}`;
   }
   return originalUrl;
 }

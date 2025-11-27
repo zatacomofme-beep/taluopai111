@@ -1,9 +1,12 @@
 import { DECK_LIST, DeckTheme, OBS_ROOT_URL } from '../model/TarotData';
 import { promptAction } from '@kit.ArkUI';
+import { IAPManager } from './IAPManager';
+import common from '@ohos.app.ability.common';
+import preferences from '@ohos.data.preferences';
 
 /**
  * 牌组选择/购买组件
- * 功能：展示可用牌组列表，支持预览、购买解锁（模拟）和切换当前使用的牌组
+ * 功能：展示可用牌组列表，支持预览、华为 IAP 购买解锁和切换当前使用的牌组
  */
 @Component
 export struct DeckSelectionSheet {
@@ -13,8 +16,52 @@ export struct DeckSelectionSheet {
   // 🔗 控制弹窗显示的绑定变量
   @Link isOpen: boolean;
   
-  // 💾 已拥有的牌组 ID 列表 (注意：实际项目中应使用 Preferences 持久化存储)
+  // 💾 已拥有的牌组 ID 列表
   @State ownedDecks: string[] = ['default']; 
+  
+  private context = getContext(this) as common.UIAbilityContext;
+  private iapManager = IAPManager.getInstance();
+
+  async aboutToAppear() {
+    this.iapManager.init(this.context);
+    await this.loadOwnedDecks();
+  }
+
+  // 加载已购买的牌组
+  async loadOwnedDecks() {
+    try {
+      const prefs = await preferences.getPreferences(this.context, 'user_preferences');
+      const savedDecks = await prefs.get('owned_decks', ['default']) as string[];
+      this.ownedDecks = savedDecks;
+    } catch (e) {
+      console.error('Failed to load owned decks:', e);
+    }
+  }
+
+  // 保存已购买的牌组
+  async saveOwnedDeck(deckId: string) {
+    try {
+      if (!this.ownedDecks.includes(deckId)) {
+        this.ownedDecks.push(deckId);
+        const prefs = await preferences.getPreferences(this.context, 'user_preferences');
+        await prefs.put('owned_decks', this.ownedDecks);
+        await prefs.flush();
+      }
+    } catch (e) {
+      console.error('Failed to save owned deck:', e);
+    }
+  }
+
+  async handlePurchase(deck: DeckTheme) {
+    const success = await this.iapManager.buyProduct(deck.productId);
+    if (success) {
+      await this.saveOwnedDeck(deck.id);
+      this.currentDeckFolder = deck.folder; // 购买后自动切换
+      promptAction.showToast({ message: `🎉 解锁成功！已切换至 ${deck.name}` });
+    } else {
+      promptAction.showToast({ message: '支付未完成' });
+    }
+  }
 
   build() {
     Column() {
@@ -79,15 +126,13 @@ export struct DeckSelectionSheet {
                             promptAction.showToast({ message: `已切换至: ${deck.name}` });
                           })
                      } else {
-                        Button(`解锁: ${deck.price} ⚡`)
+                        // 💰 购买按钮 (人民币)
+                        Button(`¥ ${deck.price.toFixed(2)} 购买`)
                           .fontSize(12)
                           .height(28)
-                          .backgroundColor('#FF9800')
+                          .backgroundColor('#FF5252')
                           .onClick(() => {
-                            // 模拟购买流程
-                            this.ownedDecks.push(deck.id);
-                            this.currentDeckFolder = deck.folder; // 购买后自动切换
-                            promptAction.showToast({ message: '购买成功！' });
+                            this.handlePurchase(deck);
                           })
                      }
                   }
