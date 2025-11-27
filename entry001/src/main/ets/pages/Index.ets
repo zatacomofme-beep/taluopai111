@@ -1,13 +1,14 @@
 import { FortuneManager, CardRecord } from '../common/FortuneManager';
 import { fileIo as fs, fileUri } from '@kit.CoreFileKit';
 import { uniformTypeDescriptor as utd } from '@kit.ArkData';
-import { TarotCard, TAROT_DECK } from '../model/TarotData';
+import { TarotCard, TAROT_DECK, resolveDeckImage } from '../model/TarotData';
 import common from '@ohos.app.ability.common';
 import { abilityAccessCtrl } from '@kit.AbilityKit';
 import { promptAction, curves, router, componentSnapshot } from '@kit.ArkUI';
 import { formBindingData, formProvider } from '@kit.FormKit';
 import { BottomNavBar } from '../common/BottomNavBar';
 import { ImageSaver } from '../common/ImageSaver';
+import { DeckSelectionSheet } from '../common/DeckSelectionSheet';
 import { EnergyManager } from '../common/EnergyManager';
 import { ShareHelper } from '../common/ShareHelper';
 import { CloudService } from '../common/CloudService';
@@ -103,6 +104,10 @@ struct Index {
   // === 🏛️ 弹窗状态控制 ===
   @State isGallerySheetOpen: boolean = false;
   @State isEnergySheetOpen: boolean = false;
+  @State isDeckSheetOpen: boolean = false;
+
+  // === 🎨 牌组主题 ===
+  @StorageLink('CurrentDeckFolder') currentDeckFolder: string = 'impasto%20style/';
 
   // === 数据 ===
   @State galleryList: CardRecord[] = [];
@@ -142,8 +147,11 @@ struct Index {
 
   // 智能图片源处理：兼容网络图片和本地 rawfile
   getCardImageSource(url: string): ResourceStr {
-    if (url && url.startsWith('http')) {
-      return url;
+    // 尝试根据当前牌组解析动态 URL
+    const finalUrl = resolveDeckImage(url);
+    
+    if (finalUrl && finalUrl.startsWith('http')) {
+      return finalUrl;
     }
     return $rawfile(url);
   }
@@ -752,6 +760,11 @@ struct Index {
     .width('100%').height('50%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
   }
 
+  @Builder
+  DeckSheetBuilder() {
+    DeckSelectionSheet({ isOpen: $isDeckSheetOpen })
+  }
+
   build() {
     Stack({ alignContent: Alignment.Bottom }) {
       Scroll() {
@@ -964,19 +977,33 @@ struct Index {
               .width('100%')
               .margin({ bottom: 20 })
 
-              // 3. 底部功能：补充心力 (通栏弱化，作为底部支撑)
+              // 3. 底部功能：补充心力 & 牌组
               Row() {
-                Text("⚡ 补充心力").fontSize(14).fontColor('#AAA').margin({ right: 4 })
-                Text("获得更多指引").fontSize(12).fontColor('#CCC')
-                Blank()
-                Image($r('app.media.startIcon')).width(16).height(16).fillColor('#DDD').opacity(0.5) // 假设有个箭头图标，暂时用别的替代或省略
+                Row() {
+                  Text("⚡ 补充心力").fontSize(14).fontColor('#AAA').margin({ right: 4 })
+                  Text("获得更多指引").fontSize(12).fontColor('#CCC')
+                }
+                .layoutWeight(1)
+                .justifyContent(FlexAlign.Center)
+                .onClick(() => this.handleBuyVip())
+
+                Divider().vertical(true).height(20).color('#DDD').margin({ left: 8, right: 8 })
+
+                Row() {
+                  Text("🎨 更换牌组").fontSize(14).fontColor('#AAA')
+                }
+                .layoutWeight(1)
+                .justifyContent(FlexAlign.Center)
+                .onClick(() => {
+                   animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+                     this.isDeckSheetOpen = true;
+                   })
+                })
               }
               .width('100%')
               .height(40)
-              .justifyContent(FlexAlign.Center)
               .backgroundColor('rgba(255,255,255,0.5)')
               .borderRadius(20)
-              .onClick(() => this.handleBuyVip())
             }
             .width('90%').backgroundColor('rgba(255,255,255,0.90)').backdropBlur(40).borderRadius(32).padding({ left: 24, right: 24, top: 32, bottom: 24 })
             .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.08)', offsetY: 10 })
@@ -1016,6 +1043,20 @@ struct Index {
           .width('100%')
           .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
           .zIndex(101).position({ y: '50%' }).constraintSize({ maxWidth: 480 })
+        }.width('100%').height('100%').zIndex(200)
+      }
+
+      if (this.isDeckSheetOpen) {
+        Column() {
+          Column()
+            .width('100%').height('100%').backgroundColor('rgba(0,0,0,0.4)')
+            .onClick(() => { animateTo({ duration: 300, curve: Curve.EaseOut }, () => { this.isDeckSheetOpen = false; }); })
+            .transition({ opacity: 0 })
+            .zIndex(100)
+          Column() { this.DeckSheetBuilder() }
+          .width('100%')
+          .transition({ type: TransitionType.Insert, translate: { y: '100%' } })
+          .zIndex(101).position({ y: '35%' }).constraintSize({ maxWidth: 480 }) // Higher position
         }.width('100%').height('100%').zIndex(200)
       }
 

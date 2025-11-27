@@ -1,12 +1,25 @@
 // 治愈之书 - 核心数据模型
 
+import { AppStorage } from '@kit.ArkUI';
+
 export interface TarotCard {
   id: number;
   name: string;
   name_en: string;
-  image: string; // 存储完整的 https 链接
+  image: string; // 存储完整的 https 链接 (默认牌组)
   meaning: string;
   desc: string;
+}
+
+// 🎨 牌组主题接口
+export interface DeckTheme {
+  id: string;
+  name: string;
+  desc: string;
+  folder: string; // OBS 文件夹名，例如 "default/"
+  price: number; // 价格 (心力值)
+  preview: string; // 预览图文件名
+  isLocked: boolean; // 初始状态 (实际状态需结合用户购买记录)
 }
 
 // 🛠️ 配置：是否使用本地图片
@@ -14,14 +27,63 @@ export interface TarotCard {
 // false: 使用华为云 OBS 图片
 const USE_LOCAL_IMAGES = false;
 
-// 🔴 替换为您的华为云 OBS 地址 (根据您的 OBS 链接信息)
-const OBS_BASE_URL = 'https://taluopai.obs.cn-southwest-2.myhuaweicloud.com/tarot_cards/';
+// 🔴 OBS 根路径
+export const OBS_ROOT_URL = 'https://taluopai.obs.cn-southwest-2.myhuaweicloud.com/tarot_cards/';
 
-// 辅助函数：构建完整的图片 URL
+// 📦 牌组列表配置
+export const DECK_LIST: DeckTheme[] = [
+  {
+    id: 'default',
+    name: '治愈绘本',
+    desc: '温暖治愈的绘本风格，适合日常情感疗愈。',
+    folder: 'impasto%20style/', // 默认文件夹 (请确保OBS中有此文件夹)
+    price: 0,
+    preview: 'card_0.png',
+    isLocked: false
+  },
+  {
+    id: 'classic',
+    name: '经典韦特',
+    desc: '神秘的经典韦特塔罗，符号象征丰富。',
+    folder: 'classic/', // 示例文件夹
+    price: 60,
+    preview: 'card_0.png',
+    isLocked: true
+  },
+  {
+    id: 'watercolor',
+    name: '水彩梦境',
+    desc: '轻盈通透的水彩质感，如梦似幻。',
+    folder: 'watercolor/', // 示例文件夹
+    price: 88,
+    preview: 'card_0.png',
+    isLocked: true
+  }
+];
+
+// 辅助函数：构建完整的图片 URL (初始化时使用默认牌组)
 function getImageUrl(filename: string): string {
   if (filename.startsWith('http')) return filename;
   if (USE_LOCAL_IMAGES) return filename;
-  return `${OBS_BASE_URL}${filename}`;
+  // 默认使用第一个牌组
+  return `${OBS_ROOT_URL}${DECK_LIST[0].folder}${filename}`;
+}
+
+// 🔄 核心：动态解析当前牌组图片
+export function resolveDeckImage(originalUrl: string): string {
+  if (!originalUrl) return originalUrl;
+  if (USE_LOCAL_IMAGES) return originalUrl;
+  
+  // 如果是网络图片，提取文件名并重新拼接当前牌组路径
+  if (originalUrl.startsWith('http')) {
+    const filename = originalUrl.split('/').pop();
+    if (!filename) return originalUrl;
+    
+    // 从 AppStorage 获取当前选中的牌组文件夹 (默认为第一个)
+    const currentFolder = AppStorage.Get<string>('CurrentDeckFolder') || DECK_LIST[0].folder;
+    return `${OBS_ROOT_URL}${currentFolder}${filename}`;
+  }
+  return originalUrl;
 }
 
 // 22张大阿卡纳 - 治愈绘本风数据
@@ -176,7 +238,7 @@ const MAJOR_ARCANA: TarotCard[] = [
     name_en: "The Moon",
     image: getImageUrl("card_18.png"),
     meaning: "梦境 · 潜意识 · 朦胧",
-    desc: "今晚的梦也许会给你答案。不必看清前路的每一步，借着月光，相信直觉，慢慢走，不会迷路的。"
+    desc: "今晚的梦也许会给你答案。不必看清前路的每一步，借助月光，相信直觉，慢慢走，不会迷路的。"
   },
   {
     id: 19,
