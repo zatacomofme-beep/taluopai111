@@ -12,7 +12,7 @@ export struct BottomNavBar {
         if (this.current === key) {
           // 选中态的光晕背景
           Circle({ width: 40, height: 40 })
-            .fill('rgba(255, 105, 180, 0.15)')
+            .fill('rgba(251, 114, 153, 0.1)')
             .scale({ x: 1, y: 1 })
             .animation({ duration: 300, curve: Curve.EaseOut })
         }
@@ -27,12 +27,20 @@ export struct BottomNavBar {
       // 文字标签
       Text(label)
         .fontSize(10)
-        .fontColor(this.current === key ? '#FF69B4' : '#999999')
+        .fontColor(this.current === key ? '#FB7299' : '#B0B0B0')
         .margin({ top: 4 })
         .fontWeight(this.current === key ? FontWeight.Medium : FontWeight.Normal)
     }
     .layoutWeight(1)
     .justifyContent(FlexAlign.Center)
+    .stateStyles({
+      pressed: {
+        .scale({ x: 0.9, y: 0.9 })
+      },
+      normal: {
+        .scale({ x: 1, y: 1 })
+      }
+    })
     .onClick(() => {
       if (this.current !== key) {
         router.replaceUrl({ url: targetUrl });
@@ -50,10 +58,10 @@ export struct BottomNavBar {
     }
     .width('90%')
     .height(70)
-    .backgroundColor('rgba(255, 255, 255, 0.95)') // 略微增加不透明度
+    .backgroundColor('rgba(255, 255, 255, 0.9)') // 略微增加不透明度
     .backdropBlur(20)
     .borderRadius(35)
-    .shadow({ radius: 30, color: 'rgba(0,0,0,0.08)', offsetY: 10 })
+    .shadow({ radius: 25, color: 'rgba(0,0,0,0.05)', offsetY: 8 })
     .padding({ left: 10, right: 10 })
     .margin({ bottom: 20 })
   }

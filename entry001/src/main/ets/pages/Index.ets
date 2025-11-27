@@ -20,6 +20,23 @@ const OBS_PATH = 'https://taluopai.obs.cn-southwest-2.myhuaweicloud.com/tarot_ca
 const CARD_BACK_URL = `${OBS_PATH}card_back.png`;
 const QR_CODE_URL = `${OBS_PATH}qr_code.png`;
 
+// 🌟 稀有度配置接口
+interface RarityItem {
+  level: number;
+  label: string;
+  color: string;
+  desc: string;
+}
+
+// 🌟 稀有度配置
+const RARITY_CONFIG: RarityItem[] = [
+  { level: 1, label: 'N', color: 'rgba(200, 200, 200, 0.5)', desc: '普通' },
+  { level: 3, label: 'R', color: 'rgba(60, 179, 113, 0.6)', desc: '稀有' },
+  { level: 4, label: 'SR', color: 'rgba(30, 144, 255, 0.7)', desc: '史诗' },
+  { level: 5, label: 'SSR', color: 'rgba(255, 69, 0, 0.8)', desc: '传说' },
+  { level: 6, label: 'UR', color: 'rgba(255, 215, 0, 0.9)', desc: '神话' }
+];
+
 @Entry
 @Component
 struct Index {
@@ -32,6 +49,7 @@ struct Index {
   // === 🌈 珍稀度系统 ===
   @State rarityColor: string = 'rgba(0,0,0,0.15)';
   @State rarityLevel: number = 1;
+  @State rarityLabel: string = 'N'; // 新增：显示稀有度标签
 
   // === 🎬 动画状态 ===
   @State angle: number = 0;
@@ -63,10 +81,24 @@ struct Index {
   @State deckAngle1: number = -5;
   @State deckAngle2: number = 5;
 
+  // 👻 幻影牌堆（用于更华丽的洗牌/扇形动画）
+  @State phantomOffset1: number = 0;
+  @State phantomOffset2: number = 0;
+  @State phantomAngle1: number = 0;
+  @State phantomAngle2: number = 0;
+  @State phantomOpacity: number = 0;
+
+  // 🔒 交互锁
+  @State isAnimating: boolean = false;
+
   // === 🌈 特效变量 ===
   @State glowScale: number = 1;
   @State glowOpacity: number = 0;
   @State starScale: number = 0;
+  @State flashOpacity: number = 0; // 新增：全屏闪光透明度
+  @State flashColor: string = '#FFFFFF'; // 新增：全屏闪光颜色
+  @State godRayRotate: number = 0; // 新增：圣光旋转角度
+  @State godRayOpacity: number = 0; // 新增：圣光透明度
 
   // === 🏛️ 弹窗状态控制 ===
   @State isGallerySheetOpen: boolean = false;
@@ -163,17 +195,26 @@ struct Index {
 
   async checkState() {
     this.isVip = await this.manager.isVip();
-    const savedCard = await this.manager.checkTodayCard();
-    if (savedCard) {
-      this.currentCard = savedCard;
+    const savedData = await this.manager.checkTodayCard();
+    if (savedData) {
+      this.currentCard = savedData.card;
+      this.rarityLevel = savedData.rarityLevel;
+      this.rarityColor = savedData.rarityColor;
+      
+      // 根据稀有度获取对应的标签
+      const config = RARITY_CONFIG.find(c => c.level === this.rarityLevel);
+      this.rarityLabel = config ? config.label : 'N';
+
       this.angle = 180;
       this.isFlipped = true;
       this.showResultText = true;
       this.startBreathingAnimation();
-      this.rarityColor = 'rgba(255, 182, 193, 0.5)';
-      this.shadowColor = this.rarityColor;
-      this.shadowRadius = 20;
-      this.updateForm(savedCard);
+      
+      // 恢复阴影效果
+      this.shadowColor = this.rarityLevel >= 5 ? this.rarityColor : 'rgba(0,0,0,0.2)';
+      this.shadowRadius = this.rarityLevel >= 5 ? 30 : 10;
+      
+      this.updateForm(savedData.card);
     } else {
       this.resetUI();
     }
@@ -206,6 +247,48 @@ struct Index {
     this.shuffleOffsetX = 0;
     this.shuffleRotate = 0;
     this.shuffleScale = 1;
+    this.phantomOpacity = 0;
+    this.phantomOffset1 = 0;
+    this.phantomOffset2 = 0;
+    this.phantomAngle1 = 0;
+    this.phantomAngle2 = 0;
+    this.isAnimating = false;
+    this.godRayOpacity = 0;
+    this.godRayRotate = 0;
+  }
+
+  @Builder GodRayBuilder() {
+    Stack() {
+      // 主光束
+      ForEach([0, 45, 90, 135], (angle: number) => {
+        Column()
+          .width(30)
+          .height(600)
+          .linearGradient({
+            direction: GradientDirection.Top,
+            colors: [[this.rarityLevel === 6 ? '#FFD700' : '#FF4500', 0], ['rgba(255,255,255,0)', 0.5], [this.rarityLevel === 6 ? '#FFD700' : '#FF4500', 1]]
+          })
+          .opacity(0.3)
+          .rotate({ angle: angle })
+      })
+      // 副光束
+      ForEach([22.5, 67.5, 112.5, 157.5], (angle: number) => {
+        Column()
+          .width(15)
+          .height(500)
+          .linearGradient({
+            direction: GradientDirection.Top,
+            colors: [['#FFFFFF', 0], ['rgba(255,255,255,0)', 0.5], ['#FFFFFF', 1]]
+          })
+          .opacity(0.4)
+          .rotate({ angle: angle })
+      })
+    }
+    .width(500)
+    .height(500)
+    .rotate({ angle: this.godRayRotate })
+    .opacity(this.godRayOpacity)
+    .hitTestBehavior(HitTestMode.None) // 不拦截点击
   }
 
   updateForm(card: TarotCard) {
@@ -257,12 +340,17 @@ struct Index {
 
   calculateRarity() {
     const rand = Math.random() * 100;
-    if (rand < 0.1) { this.rarityLevel = 7; this.rarityColor = 'rgba(255, 215, 0, 0.9)'; }
-    else if (rand < 1.1) { this.rarityLevel = 6; this.rarityColor = 'rgba(255, 69, 0, 0.8)'; }
-    else if (rand < 6.1) { this.rarityLevel = 5; this.rarityColor = 'rgba(138, 43, 226, 0.7)'; }
-    else if (rand < 16.1) { this.rarityLevel = 4; this.rarityColor = 'rgba(30, 144, 255, 0.7)'; }
-    else if (rand < 36.1) { this.rarityLevel = 3; this.rarityColor = 'rgba(60, 179, 113, 0.6)'; }
-    else { this.rarityLevel = 1; this.rarityColor = 'rgba(200, 200, 200, 0.5)'; }
+    let config = RARITY_CONFIG[0]; // Default N
+
+    if (rand < 1) config = RARITY_CONFIG.find(c => c.level === 6) || config;      // UR 1%
+    else if (rand < 6) config = RARITY_CONFIG.find(c => c.level === 5) || config; // SSR 5%
+    else if (rand < 20) config = RARITY_CONFIG.find(c => c.level === 4) || config;// SR 14%
+    else if (rand < 50) config = RARITY_CONFIG.find(c => c.level === 3) || config;// R 30%
+    else config = RARITY_CONFIG.find(c => c.level === 1) || config;               // N 50%
+
+    this.rarityLevel = config.level;
+    this.rarityColor = config.color;
+    this.rarityLabel = config.label;
   }
 
   getFlipDurationByRarity(): number {
@@ -305,70 +393,116 @@ struct Index {
       }
     }
 
+    // 🔒 防止重复点击
+    if (this.isAnimating) return;
+    this.isAnimating = true;
+
     this.guideOpacity = 0;
     this.stopMysteryAnimation();
 
+    // === 🎬 阶段 1：唤醒牌堆 (0ms - 300ms) ===
+    // 显现所有牌，准备洗牌
     await this.asyncAnimateTo(300, Curve.EaseOut, () => {
       this.mainScale = 0.9;
       this.shadowRadius = 5;
       this.shadowOffsetY = 2;
       this.deckOpacity = 1;
-      this.deckOffset1 = -40;
-      this.deckOffset2 = 40;
+      this.phantomOpacity = 1; // 显示幻影牌
+      // 归位
+      this.deckOffset1 = 0; this.deckOffset2 = 0;
+      this.phantomOffset1 = 0; this.phantomOffset2 = 0;
     });
 
-    for (let i = 0; i < 3; i++) {
+    // === 🎬 阶段 2：华丽洗牌 (300ms - 900ms) ===
+    // 模拟洗牌动作：牌左右交错
+    for (let i = 0; i < 4; i++) {
       const dir = i % 2 === 0 ? 1 : -1;
-      await this.asyncAnimateTo(150, Curve.Sharp, () => {
-        this.shuffleOffsetX = 60 * dir;
-        this.shuffleRotate = 6 * dir;
-        this.deckOffset1 = -60 * dir;
-        this.deckOffset2 = -20 * dir;
-      });
-      await this.asyncAnimateTo(150, Curve.Sharp, () => {
-        this.shuffleOffsetX = 0;
-        this.shuffleRotate = 0;
-        this.deckOffset1 = -40;
-        this.deckOffset2 = 40;
+      await this.asyncAnimateTo(150, Curve.Rhythm, () => {
+        this.shuffleRotate = 2 * dir;
+        this.deckOffset1 = -20 * dir;
+        this.deckOffset2 = 20 * dir;
+        this.phantomOffset1 = -40 * dir;
+        this.phantomOffset2 = 40 * dir;
+        this.deckAngle1 = -5 * dir;
+        this.deckAngle2 = 5 * dir;
       });
     }
 
+    // 在洗牌间隙获取数据
     this.currentCard = await this.manager.drawDailyCard();
     this.calculateRarity();
 
     if (this.currentCard) {
-      await this.manager.saveDrawResult(this.currentCard, this.rarityColor);
-
-      // 🟢 事件触发：抽完卡后，自动备份到云端
+      await this.manager.saveDrawResult(this.currentCard, this.rarityColor, this.rarityLevel);
       CloudService.autoSave();
     }
 
-    await this.asyncAnimateTo(500, curves.springMotion(0.6, 0.7), () => {
-      this.mainScale = 1.05;
-      this.floatOffsetY = 0;
-      this.shuffleOffsetX = 0;
+    // === 🎬 阶段 3：扇形展开 (900ms - 1400ms) ===
+    await this.asyncAnimateTo(500, curves.springMotion(0.6, 0.8), () => {
       this.shuffleRotate = 0;
-      this.shadowColor = 'rgba(0,0,0,0.15)';
-      this.deckOpacity = 0;
-      this.deckOffset1 = -300;
-      this.deckOffset2 = 300;
+      this.mainScale = 1.0;
+      // 扇形展开
+      this.deckOffset1 = -60;   this.deckAngle1 = -10;
+      this.deckOffset2 = 60;    this.deckAngle2 = 10;
+      this.phantomOffset1 = -120; this.phantomAngle1 = -20;
+      this.phantomOffset2 = 120;  this.phantomAngle2 = 20;
     });
 
+    // 稍作停顿
+    await new Promise<void>(r => setTimeout(r, 200));
+
+    // === 🎬 阶段 4：选中抽离 (1600ms - 2100ms) ===
+    await this.asyncAnimateTo(500, curves.springMotion(0.7, 0.7), () => {
+      // 主牌突出并上浮
+      this.mainScale = 1.1;
+      this.floatOffsetY = -50;
+      this.shadowRadius = 30;
+      this.shadowColor = 'rgba(0,0,0,0.3)';
+      
+      // 其他牌退散
+      this.deckOpacity = 0;
+      this.phantomOpacity = 0;
+      this.deckOffset1 = -200; this.deckOffset2 = 200;
+      this.phantomOffset1 = -300; this.phantomOffset2 = 300;
+    });
+
+    // === 🎬 阶段 5：翻转揭晓 ===
     const flipDuration = this.getFlipDurationByRarity();
 
+    // 🌟 SSR/UR 专属炫酷特效
     if (this.rarityLevel >= 5) {
       setTimeout(() => {
-        this.glowScale = 0.8;
-        this.glowOpacity = 1;
-        animateTo({ duration: 800, curve: Curve.EaseOut }, () => {
-          this.glowScale = 2.5;
-          this.glowOpacity = 0;
+        // 1. 全屏闪光
+        this.flashColor = this.rarityLevel === 6 ? '#FFD700' : '#FF4500'; // UR金光，SSR红光
+        animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
+          this.flashOpacity = 0.8;
         });
+        setTimeout(() => {
+          animateTo({ duration: 800, curve: Curve.EaseIn }, () => {
+            this.flashOpacity = 0;
+          });
+        }, 300);
+
+        // 2. 圣光降临 (God Ray)
+        this.godRayOpacity = 0;
+        this.godRayRotate = 0;
+        
+        // 启动圣光旋转 (持续旋转)
+        animateTo({ duration: 10000, curve: Curve.Linear, iterations: -1, playMode: PlayMode.Normal }, () => {
+            this.godRayRotate = 360;
+        });
+
+        // 圣光渐显
+        animateTo({ duration: 1000, curve: Curve.EaseOut }, () => {
+          this.godRayOpacity = 1;
+        });
+
+        // 3. 星光粒子浮现
         this.starScale = 0;
-        animateTo({ duration: 600, curve: curves.springMotion(0.6, 0.8) }, () => {
-          this.starScale = 1.2;
+        animateTo({ duration: 800, curve: curves.springMotion(0.6, 0.8) }, () => {
+          this.starScale = 1.5;
         });
-      }, flipDuration / 3);
+      }, flipDuration / 2 - 200); // 在翻转快结束时触发
     }
 
     await this.asyncAnimateTo(flipDuration, curves.springMotion(0.6, 0.8), () => {
@@ -379,13 +513,16 @@ struct Index {
       this.shadowOffsetY = 10;
     });
 
+    // 普通卡牌不需要光晕常驻，或者仅保留微弱光晕
     await this.asyncAnimateTo(500, Curve.EaseOut, () => {
-      this.shadowColor = this.rarityColor;
-      this.shadowRadius = this.getGlowRadiusByRarity();
+      // 只有 SSR/UR 保留圣光，其他无额外光晕
+      this.shadowColor = this.rarityLevel >= 5 ? this.rarityColor : 'rgba(0,0,0,0.2)'; 
+      this.shadowRadius = this.rarityLevel >= 5 ? 30 : 10;
       this.shadowOffsetY = 0;
     });
 
     this.isFlipped = true;
+    this.isAnimating = false; // 解锁
     this.startBreathingAnimation();
 
     if (this.currentCard) {
@@ -531,6 +668,14 @@ struct Index {
     return record ? record.rarityColor : 'rgba(0,0,0,0.1)';
   }
 
+  // 🟢 新增：获取卡牌稀有度标签
+  getCardRarityLabel(id: number): string {
+    const record = this.galleryList.find(r => r.cardId === id);
+    if (!record || !record.rarityLevel) return 'N';
+    const config = RARITY_CONFIG.find(c => c.level === record.rarityLevel);
+    return config ? config.label : 'N';
+  }
+
   @Builder GallerySheetBuilder() {
     Column() {
       Row() {
@@ -540,8 +685,8 @@ struct Index {
         }.alignItems(HorizontalAlign.Start)
         Blank()
         Stack() {
-          Progress({ value: this.collectionProgress, total: 100, type: ProgressType.Ring }).color('#FF69B4').width(44)
-          Text(`${this.collectionProgress}%`).fontSize(10).fontColor('#FF69B4').fontWeight(FontWeight.Bold)
+          Progress({ value: this.collectionProgress, total: 100, type: ProgressType.Ring }).color('#FB7299').width(44)
+          Text(`${this.collectionProgress}%`).fontSize(10).fontColor('#FB7299').fontWeight(FontWeight.Bold)
         }.margin({ right: 32 })
       }.width('100%').padding({ left: 24, right: 24, top: 24, bottom: 10 })
       Divider().color('#F9F9F9').width('90%')
@@ -555,6 +700,14 @@ struct Index {
                     .width('100%').aspectRatio(2/3).borderRadius(10)
                     .shadow({ radius: 8, color: this.getCardRarityColor(card.id), offsetY: 2 })
                     .alt($rawfile('card_back.png'))
+                  
+                  // 🌟 稀有度标签
+                  Text(this.getCardRarityLabel(card.id))
+                    .fontSize(10).fontWeight(FontWeight.Bold).fontColor(Color.White)
+                    .backgroundColor(this.getCardRarityColor(card.id))
+                    .padding({ left: 6, right: 6, top: 2, bottom: 2 })
+                    .borderRadius({ topLeft: 8, bottomRight: 8 })
+                    .position({ x: 0, y: 0 })
                 }
                 Text(card.name).fontSize(12).fontColor('#333').fontWeight(FontWeight.Medium).margin({ top: 8 })
               } else {
@@ -587,13 +740,13 @@ struct Index {
       Row() {
         Column() { Text("观看广告").fontSize(16).fontWeight(FontWeight.Bold); Text("立即获得 +10 心力").fontSize(12).fontColor('#999').margin({ top: 4 }) }.alignItems(HorizontalAlign.Start)
         Blank()
-        Button("去观看").backgroundColor('#E0F7FA').fontColor('#006064').height(32).fontSize(12).onClick(() => this.handleRecharge(10))
+        Button("去观看").backgroundColor('#E1F5FE').fontColor('#0277BD').height(32).fontSize(12).onClick(() => this.handleRecharge(10))
       }.width('90%').padding(16).backgroundColor('#FAFAFA').borderRadius(16).margin({ bottom: 12 })
 
       Row() {
         Column() { Text("心力礼包").fontSize(16).fontWeight(FontWeight.Bold); Text("获得 +100 心力").fontSize(12).fontColor('#999').margin({ top: 4 }) }.alignItems(HorizontalAlign.Start)
         Blank()
-        Button("¥ 6.00").backgroundColor('#FFF0F5').fontColor('#FF69B4').height(32).fontSize(12).onClick(() => this.handleRecharge(100))
+        Button("¥ 6.00").backgroundColor('#FCE4EC').fontColor('#FB7299').height(32).fontSize(12).onClick(() => this.handleRecharge(100))
       }.width('90%').padding(16).backgroundColor('#FAFAFA').borderRadius(16)
     }
     .width('100%').height('50%').backgroundColor(Color.White).borderRadius({ topLeft: 24, topRight: 24 })
@@ -618,22 +771,26 @@ struct Index {
 
               if (this.currentUserInfo) {
                 Text(this.currentUserInfo.nickname || '用户')
-                  .fontSize(14).fontColor('#333').fontWeight(FontWeight.Medium)
+                  .fontSize(14).fontColor('#555').fontWeight(FontWeight.Medium)
               } else {
                 Text('登录').fontSize(14).fontColor('#666')
               }
             }
-            .backgroundColor('rgba(255,255,255,0.6)')
+            .backgroundColor('rgba(255,255,255,0.85)')
+            .backdropBlur(10)
             .padding({ left: 8, right: 12, top: 6, bottom: 6 })
             .borderRadius(20)
+            .shadow({ radius: 10, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
             .onClick(() => this.handleUserClick())
 
             Blank()
 
             // 云同步入口
-            // 🟢 修复：保留云同步入口，但逻辑已改为自动同步的触发/提示
             Button({ type: ButtonType.Circle }) { Text('☁️').fontSize(16) }
-            .width(36).height(36).backgroundColor('rgba(255,255,255,0.8)')
+            .width(36).height(36)
+            .backgroundColor('rgba(255,255,255,0.85)')
+            .backdropBlur(10)
+            .shadow({ radius: 10, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
             .margin({ right: 12 })
             .onClick(() => {
               // 点击时手动触发一次同步检查
@@ -650,33 +807,57 @@ struct Index {
 
             Row() {
               Text('⚡').fontSize(14)
-              Text(`${this.currentEnergy}`).fontSize(14).fontColor('#FF69B4').fontWeight(FontWeight.Bold).margin({left: 2})
-            }.backgroundColor('rgba(255,255,255,0.6)').padding({left: 10, right: 10, top: 6, bottom: 6}).borderRadius(14).margin({right: 12}).onClick(() => this.handleBuyVip())
+              Text(`${this.currentEnergy}`).fontSize(14).fontColor('#FB7299').fontWeight(FontWeight.Bold).margin({left: 2})
+            }
+            .backgroundColor('rgba(255,255,255,0.85)')
+            .backdropBlur(10)
+            .padding({left: 12, right: 12, top: 8, bottom: 8})
+            .borderRadius(18)
+            .margin({right: 12})
+            .shadow({ radius: 10, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
+            .onClick(() => this.handleBuyVip())
 
             Button({ type: ButtonType.Circle }) { Text('🏛️').fontSize(18) }
-            .width(40).height(40).backgroundColor(Color.White).shadow({ radius: 8, color: 'rgba(0,0,0,0.05)' })
+            .width(40).height(40)
+            .backgroundColor('rgba(255,255,255,0.9)')
+            .backdropBlur(10)
+            .shadow({ radius: 10, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
             .onClick(() => this.loadGalleryData())
           }.width('100%').padding({ left: 24, right: 24, top: 16 }).height(60)
 
           Blank().height(20)
 
           Stack() {
-            Circle({ width: 260, height: 260 }).fill('#FFFFFF').opacity(0.5)
-              .scale({ x: this.mysteryScale, y: this.mysteryScale }).blur(40)
+            Circle({ width: 260, height: 260 }).fill('#FFFFFF').opacity(0.4)
+              .scale({ x: this.mysteryScale, y: this.mysteryScale }).blur(50)
 
             if (this.rarityLevel >= 5) {
-              Circle({ width: 200, height: 200 })
-                .fill(this.rarityColor)
-                .scale({ x: this.glowScale, y: this.glowScale })
-                .opacity(this.glowOpacity)
-                .blur(20)
+              this.GodRayBuilder()
             }
 
             // 装饰性牌堆使用 CARD_BACK_URL
+            // 👻 幻影牌 1 (左远)
+            Image(CARD_BACK_URL).width('100%').height('100%').borderRadius(16)
+              .scale({ x: this.deckScale, y: this.deckScale })
+              .translate({ x: this.phantomOffset1 })
+              .rotate({ z: 1, angle: this.phantomAngle1 })
+              .opacity(this.phantomOpacity)
+              .alt($rawfile('card_back.png'))
+
+            // 👻 幻影牌 2 (右远)
+            Image(CARD_BACK_URL).width('100%').height('100%').borderRadius(16)
+              .scale({ x: this.deckScale, y: this.deckScale })
+              .translate({ x: this.phantomOffset2 })
+              .rotate({ z: 1, angle: this.phantomAngle2 })
+              .opacity(this.phantomOpacity)
+              .alt($rawfile('card_back.png'))
+
+            // 原有装饰牌 1 (左)
             Image(CARD_BACK_URL).width('100%').height('100%').borderRadius(16)
               .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset1 }).rotate({ z: 1, angle: this.deckAngle1 }).opacity(this.deckOpacity)
               .alt($rawfile('card_back.png'))
 
+            // 原有装饰牌 2 (右)
             Image(CARD_BACK_URL).width('100%').height('100%').borderRadius(16)
               .scale({ x: this.deckScale, y: this.deckScale }).translate({ x: this.deckOffset2 }).rotate({ z: 1, angle: this.deckAngle2 }).opacity(this.deckOpacity)
               .alt($rawfile('card_back.png'))
@@ -714,46 +895,91 @@ struct Index {
 
           if (this.showResultText && this.currentCard) {
             Column() {
-              Text(this.currentCard.name).fontSize(24).fontWeight(FontWeight.Bold).fontColor('#333333').margin({bottom: 4})
+              Row() {
+                // 🌟 结果页稀有度标签
+                Text(this.rarityLabel)
+                  .fontSize(14).fontWeight(FontWeight.Bold).fontColor(Color.White)
+                  .backgroundColor(this.rarityColor)
+                  .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+                  .borderRadius(6)
+                  .margin({ right: 8 })
+
+                Text(this.currentCard.name).fontSize(24).fontWeight(FontWeight.Bold).fontColor('#333333')
+              }.margin({bottom: 4})
+
               Text(this.currentCard.name_en).fontSize(14).fontColor('#AAAAAA').fontStyle(FontStyle.Italic).margin({bottom: 16})
               Text(this.currentCard.desc).fontSize(16).fontColor('#555555').textAlign(TextAlign.Center).lineHeight(26).padding({ left: 20, right: 20 }).opacity(0.9)
-              Divider().color('#F0F0F0').width('80%').margin({top: 24, bottom: 24})
+              Divider().color('rgba(0,0,0,0.05)').width('80%').margin({top: 24, bottom: 24})
 
-              Button("✨ 分享")
-                .backgroundColor('#333333')
-                .fontColor(Color.White)
-                .height(44)
-                .width('90%')
-                .borderRadius(22)
-                .margin({ bottom: 12 })
-                .onClick(() => this.handleShare())
-
+              // 1. 主要操作：深度解读 (强调色，占据C位)
               Button("🔮 深度解读")
-                .backgroundColor('#E0F7FA')
-                .fontColor('#006064')
-                .height(44)
-                .width('90%')
-                .borderRadius(22)
-                .margin({ bottom: 12 })
+                .backgroundColor('#87CEEB') // 天空蓝，治愈系
+                .linearGradient({
+                  direction: GradientDirection.Right,
+                  colors: [['#89CFF0', 0], ['#B0E0E6', 1]]
+                })
+                .fontColor(Color.White)
+                .fontSize(18)
+                .fontWeight(FontWeight.Medium)
+                .height(56)
+                .width('100%')
+                .borderRadius(28)
+                .shadow({ radius: 15, color: 'rgba(137, 207, 240, 0.4)', offsetY: 5 })
+                .margin({ bottom: 16 })
+                .stateStyles({ pressed: { .scale({ x: 0.98, y: 0.98 }) }, normal: { .scale({ x: 1, y: 1 }) } })
                 .onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
 
-              if (this.moodIndex === -1) {
-                Button("📝 记录此刻心情")
-                  .backgroundColor('#FFF0F5')
-                  .fontColor('#FF69B4')
-                  .height(44)
-                  .width('90%')
-                  .borderRadius(22)
-                  .margin({ bottom: 12 })
-                  .onClick(() => router.pushUrl({ url: 'pages/MoodPage' }))
-              }
+              // 2. 次要操作：分享 & 记录 (并排，轻量化)
+              Row({ space: 12 }) {
+                Button("✨ 分享")
+                  .backgroundColor('#F5F7FA')
+                  .fontColor('#555')
+                  .height(48)
+                  .layoutWeight(1)
+                  .borderRadius(24)
+                  .stateStyles({ pressed: { .scale({ x: 0.96, y: 0.96 }) }, normal: { .scale({ x: 1, y: 1 }) } })
+                  .onClick(() => this.handleShare())
 
-              Button("⚡ 补充心力").backgroundColor(this.moodIndex === -1 ? '#FFFFFF' : '#FFF0F5').fontColor('#FF69B4').height(44).width('90%').borderRadius(22)
-                .border(this.moodIndex === -1 ? { width: 1, color: '#FF69B4' } : { width: 0 })
-                .onClick(() => this.handleBuyVip())
+                if (this.moodIndex === -1) {
+                  Button("📝 记录心情")
+                    .backgroundColor('#FFF0F5')
+                    .fontColor('#DB7093') // 苍紫罗兰色
+                    .height(48)
+                    .layoutWeight(1)
+                    .borderRadius(24)
+                    .stateStyles({ pressed: { .scale({ x: 0.96, y: 0.96 }) }, normal: { .scale({ x: 1, y: 1 }) } })
+                    .onClick(() => router.pushUrl({ url: 'pages/MoodPage' }))
+                } else {
+                  // 如果已记录，显示查看按钮或占位
+                  Button("✅ 已记录")
+                    .backgroundColor('#F0FFF0')
+                    .fontColor('#3CB371')
+                    .height(48)
+                    .layoutWeight(1)
+                    .borderRadius(24)
+                    .stateStyles({ pressed: { .scale({ x: 0.96, y: 0.96 }) }, normal: { .scale({ x: 1, y: 1 }) } })
+                    .onClick(() => router.pushUrl({ url: 'pages/MoodPage' }))
+                }
+              }
+              .width('100%')
+              .margin({ bottom: 20 })
+
+              // 3. 底部功能：补充心力 (通栏弱化，作为底部支撑)
+              Row() {
+                Text("⚡ 补充心力").fontSize(14).fontColor('#AAA').margin({ right: 4 })
+                Text("获得更多指引").fontSize(12).fontColor('#CCC')
+                Blank()
+                Image($r('app.media.startIcon')).width(16).height(16).fillColor('#DDD').opacity(0.5) // 假设有个箭头图标，暂时用别的替代或省略
+              }
+              .width('100%')
+              .height(40)
+              .justifyContent(FlexAlign.Center)
+              .backgroundColor('rgba(255,255,255,0.5)')
+              .borderRadius(20)
+              .onClick(() => this.handleBuyVip())
             }
-            .width('92%').backgroundColor('rgba(255,255,255,0.8)').backdropBlur(10).borderRadius(24).padding({ top: 30, bottom: 20 })
-            .shadow({ radius: 20, color: 'rgba(0,0,0,0.04)', offsetY: 5 })
+            .width('90%').backgroundColor('rgba(255,255,255,0.90)').backdropBlur(40).borderRadius(32).padding({ left: 24, right: 24, top: 32, bottom: 24 })
+            .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.08)', offsetY: 10 })
             .transition({ type: TransitionType.Insert, opacity: 0, translate: { y: 20 } })
           } else {
             Text("点击卡牌，开启今日指引").fontSize(14).fontColor('#AAAAAA').letterSpacing(1).opacity(this.guideOpacity).margin({ top: 20 })
@@ -792,8 +1018,13 @@ struct Index {
           .zIndex(101).position({ y: '50%' }).constraintSize({ maxWidth: 480 })
         }.width('100%').height('100%').zIndex(200)
       }
+
+      // 🌟 全屏闪光 (Flash Effect)
+      Rect().width('100%').height('100%').fill(this.flashColor).opacity(this.flashOpacity)
+        .hitTestBehavior(HitTestMode.None)
+        .zIndex(999)
     }
     .width('100%').height('100%')
-    .linearGradient({ direction: GradientDirection.Top, colors: [['#FDFBFB', 0.0], ['#F2F4F8', 1.0]] })
+    .linearGradient({ direction: GradientDirection.Top, colors: [['#FFF9F9', 0.0], ['#FFF0F5', 1.0]] })
   }
 }

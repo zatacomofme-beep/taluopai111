@@ -7,11 +7,11 @@
         "material": {
           "certpath": "C:\\Users\\tutumao01\\.ohos\\config\\default_taluopai111_JqaRaKQZ1FrRbF8fJ64kXHpMy_5ZZn0xBpR8HJoLxDQ=.cer",
           "keyAlias": "debugKey",
-          "keyPassword": "0000001BC3AC44949072B4B56B2B19917FDC5B4C07F058AD52941E42D34833A074FB5D3397B37000D439F4",
+          "keyPassword": "0000001B3633CD8EA3A38F24BB07F7BB6F729F7E5AC49FD910916D68CF6ADCF9923E6FF50B9983F5F666CA",
           "profile": "C:\\Users\\tutumao01\\.ohos\\config\\default_taluopai111_JqaRaKQZ1FrRbF8fJ64kXHpMy_5ZZn0xBpR8HJoLxDQ=.p7b",
           "signAlg": "SHA256withECDSA",
           "storeFile": "C:\\Users\\tutumao01\\.ohos\\config\\default_taluopai111_JqaRaKQZ1FrRbF8fJ64kXHpMy_5ZZn0xBpR8HJoLxDQ=.p12",
-          "storePassword": "0000001BAEB1BA60A5DABA7D0F339FD8BD3DFD852717826EA8439DD0D8657FC7021D001C7C2830FAF9A20F"
+          "storePassword": "0000001B19E610EC72E30287E1D3F95254D298B76861C195F9D6004FF1F72DCC79B48E4D4BAC2474EC9555"
         }
       }
     ],

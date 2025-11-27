@@ -9,17 +9,23 @@ export interface TarotCard {
   desc: string;
 }
 
+// 🛠️ 配置：是否使用本地图片
+// true: 使用本地 rawfile 中的图片 (需将图片放入 resources/rawfile 目录)
+// false: 使用华为云 OBS 图片
+const USE_LOCAL_IMAGES = false;
+
 // 🔴 替换为您的华为云 OBS 地址 (根据您的 OBS 链接信息)
 const OBS_BASE_URL = 'https://taluopai.obs.cn-southwest-2.myhuaweicloud.com/tarot_cards/';
 
 // 辅助函数：构建完整的图片 URL
 function getImageUrl(filename: string): string {
   if (filename.startsWith('http')) return filename;
+  if (USE_LOCAL_IMAGES) return filename;
   return `${OBS_BASE_URL}${filename}`;
 }
 
 // 22张大阿卡纳 - 治愈绘本风数据
-export const TAROT_DECK: TarotCard[] = [
+const MAJOR_ARCANA: TarotCard[] = [
   {
     id: 0,
     name: "愚人",
@@ -82,7 +88,7 @@ export const TAROT_DECK: TarotCard[] = [
     name_en: "The Chariot",
     image: getImageUrl("card_7.png"),
     meaning: "勇气 · 前进 · 胜利",
-    desc: "握紧你的方向盘，出发吧！路途可能有点颠簸，但你驾驶的是通往梦想的南瓜马车，没有什么能挡住你。"
+    desc: "握紧你的方向盘，出发吧！路途可能有点颠簸，但你驾驶的是通往梦想的南瓜马车，Nothing can block you."
   },
   {
     id: 8,
@@ -98,7 +104,7 @@ export const TAROT_DECK: TarotCard[] = [
     name_en: "The Hermit",
     image: getImageUrl("card_9.png"),
     meaning: "独处 · 探索 · 光芒",
-    desc: "给自己一段独处的时光吧。像提灯的小蜗牛一样，虽然走得慢，但每一步都踩在自己的节奏上，心里亮堂堂的。"
+    desc: "给自己一段独处的时光吧。像提灯的小蜗牛一样，虽然走得慢，但每一步都踩在自己节奏上，心里亮堂堂的。"
   },
   {
     id: 10,
@@ -197,3 +203,78 @@ export const TAROT_DECK: TarotCard[] = [
     desc: "你已经做得够好了。给自己一个大大的拥抱吧。所有的努力都开出了花，尽情享受这完美的时刻。"
   }
 ];
+
+// 权杖组 (Wands) - 火元素：行动、热情、灵感
+const WANDS_DECK: TarotCard[] = [
+  { id: 22, name: "权杖王牌", name_en: "Ace of Wands", image: getImageUrl("wands_ace.png"), meaning: "灵感 · 新行动 · 激情", desc: "一个新的点子点燃了你的热情！就像刚划着的火柴，充满了无限可能。抓住这个瞬间，大胆去做吧。" },
+  { id: 23, name: "权杖二", name_en: "Two of Wands", image: getImageUrl("wands_2.png"), meaning: "规划 · 展望 · 决定", desc: "你站在城堡上眺望远方，世界在你手中。是留在这里，还是去探索更广阔的天地？听从内心的召唤。" },
+  { id: 24, name: "权杖三", name_en: "Three of Wands", image: getImageUrl("wands_3.png"), meaning: "远见 · 合作 · 探索", desc: "你的船只已经扬帆起航。付出开始有了回报，现在的你需要耐心等待，同时在这个过程中寻找志同道合的伙伴。" },
+  { id: 25, name: "权杖四", name_en: "Four of Wands", image: getImageUrl("wands_4.png"), meaning: "庆祝 · 归属 · 稳定", desc: "欢迎回家！这是一个值得庆祝的时刻。无论是完成了一个小目标，还是单纯的家庭聚会，享受这份安稳的快乐。" },
+  { id: 26, name: "权杖五", name_en: "Five of Wands", image: getImageUrl("wands_5.png"), meaning: "竞争 · 冲突 · 磨练", desc: "周围可能有点吵闹，大家的意见都不一样。但这只是良性的切磋，在碰撞中，你会更清楚自己想要什么。" },
+  { id: 27, name: "权杖六", name_en: "Six of Wands", image: getImageUrl("wands_6.png"), meaning: "胜利 · 认可 · 荣耀", desc: "你骑着马凯旋归来，掌声属于你！你的努力被大家看到了，享受这一刻的荣耀吧，这是你应得的。" },
+  { id: 28, name: "权杖七", name_en: "Seven of Wands", image: getImageUrl("wands_7.png"), meaning: "坚持 · 勇气 · 防守", desc: "也许你正面临挑战，感觉大家都在反对你。但请坚持住立场，你比你想象的要强大，守住你的阵地！" },
+  { id: 29, name: "权杖八", name_en: "Eight of Wands", image: getImageUrl("wands_8.png"), meaning: "迅速 · 消息 · 变化", desc: "事情正在飞速发展！好消息像流星一样向你飞来。保持专注，跟上这个节奏，一切都会很顺利。" },
+  { id: 30, name: "权杖九", name_en: "Nine of Wands", image: getImageUrl("wands_9.png"), meaning: "韧性 · 警惕 · 坚持", desc: "虽然有点累，甚至受了点伤，但你依然站立着。黎明前的黑暗最难熬，但你离终点只差最后一步了，别放弃。" },
+  { id: 31, name: "权杖十", name_en: "Ten of Wands", image: getImageUrl("wands_10.png"), meaning: "重担 · 责任 · 压力", desc: "你是不是承担了太多？虽然你很能干，但也不要累坏了自己。试着放下一些不属于你的包袱，你会走得更轻快。" },
+  { id: 32, name: "权杖侍从", name_en: "Page of Wands", image: getImageUrl("wands_page.png"), meaning: "探索 · 消息 · 热情", desc: "像个好奇的孩子一样去探索世界吧！一个新的兴趣或消息让你跃跃欲试，保持这份赤子之心。" },
+  { id: 33, name: "权杖骑士", name_en: "Knight of Wands", image: getImageUrl("wands_knight.png"), meaning: "行动 · 冲动 · 冒险", desc: "你充满了能量，简直马上出发！这种热情很棒，但记得看清路况再冲刺，别让冲动带偏了方向。" },
+  { id: 34, name: "权杖王后", name_en: "Queen of Wands", image: getImageUrl("wands_queen.png"), meaning: "魅力 · 自信 · 独立", desc: "你是人群中发光的那一个。自信、热情、有感染力。相信自己的魅力，像向日葵一样永远面向阳光。" },
+  { id: 35, name: "权杖国王", name_en: "King of Wands", image: getImageUrl("wands_king.png"), meaning: "领导 · 远见 · 魅力", desc: "你拥有掌控全局的能力。用你的热情去感染他人，成为大家的领路人。你的愿景不仅能激励自己，也能照亮别人。" }
+];
+
+// 星币组 (Pentacles) - 土元素：物质、工作、现实
+const PENTACLES_DECK: TarotCard[] = [
+  { id: 64, name: "星币王牌", name_en: "Ace of Pentacles", image: getImageUrl("pentacles_ace.png"), meaning: "财富 · 机会 · 扎根", desc: "一颗金灿灿的种子落在了你手里。这是一个关于物质或工作的新机会。踏实地种下它，只要你用心浇灌，它会长成参天大树。" },
+  { id: 65, name: "星币二", name_en: "Two of Pentacles", image: getImageUrl("pentacles_2.png"), meaning: "平衡 · 适应 · 灵活", desc: "生活就像骑独轮车，你需要不断调整重心。虽然有点手忙脚乱，但你其实玩得挺转。保持灵活，你能hold住这一切。" },
+  { id: 66, name: "星币三", name_en: "Three of Pentacles", image: getImageUrl("pentacles_3.png"), meaning: "团队 · 技能 · 合作", desc: "三个臭皮匠，顶个诸葛亮。和大家一起合作，每个人的特长都能发挥出来。这不仅是完成任务，更是打磨手艺的过程。" },
+  { id: 67, name: "星币四", name_en: "Four of Pentacles", image: getImageUrl("pentacles_4.png"), meaning: "守财 · 安全 · 固执", desc: "把钱抱得太紧，手就没法去拿别的东西了。安全感很重要，但也不要为了安全而拒绝变化。试着松开一点手，你会拥有更多。" },
+  { id: 68, name: "星币五", name_en: "Five of Pentacles", image: getImageUrl("pentacles_5.png"), meaning: "贫困 · 困难 · 互助", desc: "外面风雪交加，但教堂的窗户透着光。也许现在有点艰难，觉得孤立无援。但别只盯着脚下的雪，抬头看看，帮助其实就在身边。" },
+  { id: 69, name: "星币六", name_en: "Six of Pentacles", image: getImageUrl("pentacles_6.png"), meaning: "慷慨 · 给予 · 接受", desc: "给予和接受是爱的循环。如果你有余力，不妨帮帮别人；如果你需要帮助，也请大方接受。善意流动起来，世界会更美好。" },
+  { id: 70, name: "星币七", name_en: "Seven of Pentacles", image: getImageUrl("pentacles_7.png"), meaning: "评估 · 耐心 · 收获", desc: "你已经辛勤耕耘了很久，现在是停下来看看成果的时候了。也许还没到丰收的季节，但果实已经挂在枝头。耐心点，时间会给你答案。" },
+  { id: 71, name: "星币八", name_en: "Eight of Pentacles", image: getImageUrl("pentacles_8.png"), meaning: "专注 · 匠人 · 细节", desc: "专注于手头的工作，像个匠人一样精雕细琢。不需要在意别人的眼光，你的每一锤、每一凿都在积累你的实力。享受专注的快乐。" },
+  { id: 72, name: "星币九", name_en: "Nine of Pentacles", image: getImageUrl("pentacles_9.png"), meaning: "富足 · 独立 · 优雅", desc: "你站在自己花园里，享受着丰盛的果实。这都是你自己努力得来的。保持优雅和自信，你值得拥有这种富足的生活。" },
+  { id: 73, name: "星币十", name_en: "Ten of Pentacles", image: getImageUrl("pentacles_10.png"), meaning: "传承 · 财富 · 家庭", desc: "这是一个繁荣的景象，物质和精神都很富足。这不仅是你一个人的成功，更是家族的荣耀。感恩前人的积累，也为后人种下希望。" },
+  { id: 74, name: "星币侍从", name_en: "Page of Pentacles", image: getImageUrl("pentacles_page.png"), meaning: "学习 · 务实 · 专注", desc: "像个学生一样认真学习新技能吧。脚踏实地，一步一个脚印。虽然慢一点，但每一步都走得很稳，这是通往成功的必经之路。" },
+  { id: 75, name: "星币骑士", name_en: "Knight of Pentacles", image: getImageUrl("pentacles_knight.png"), meaning: "勤奋 · 负责 · 可靠", desc: "你可能不是最快的，但你绝对是最靠谱的。既然承诺了，就一定会做到。这份坚持和责任感，是你最宝贵的品质。" },
+  { id: 76, name: "星币王后", name_en: "Queen of Pentacles", image: getImageUrl("pentacles_queen.png"), meaning: "照顾 · 繁荣 · 务实", desc: "你是一个会过日子的人，能把生活打理得井井有条。既能赚钱养家，又能貌美如花。享受物质带来的舒适，也用爱去滋养家人。" },
+  { id: 77, name: "星币国王", name_en: "King of Pentacles", image: getImageUrl("pentacles_king.png"), meaning: "成功 · 稳重 · 富有", desc: "你已经建立了自己的商业帝国。稳重、踏实、有眼光。用你的资源去创造更大的价值，享受这稳稳的幸福。" }
+];
+
+
+// 圣杯组 (Cups) - 水元素：情感、关系、直觉
+const CUPS_DECK: TarotCard[] = [
+  { id: 36, name: "圣杯王牌", name_en: "Ace of Cups", image: getImageUrl("cups_ace.png"), meaning: "爱 · 情感 · 新开始", desc: "爱意正在溢出！这可能是一段新感情，或者内心深处的自我接纳。敞开心扉，让这股温柔的能量流进来。" },
+  { id: 37, name: "圣杯二", name_en: "Two of Cups", image: getImageUrl("cups_2.png"), meaning: "连接 · 伙伴 · 吸引", desc: "这是心与心碰撞的时刻。无论是恋人还是朋友，一个平等的、互相尊重的关系正在建立，享受这份默契。" },
+  { id: 38, name: "圣杯三", name_en: "Three of Cups", image: getImageUrl("cups_3.png"), meaning: "欢庆 · 友谊 · 团体", desc: "叫上朋友们一起庆祝吧！分享快乐会让快乐加倍。这是一个轻松愉快的时刻，尽情享受友谊的滋润。" },
+  { id: 39, name: "圣杯四", name_en: "Four of Cups", image: getImageUrl("cups_4.png"), meaning: "观望 · 厌倦 · 思考", desc: "也许你对现状有点提不起劲，甚至忽略了眼前递给你的机会。没关系，给自己一点发呆的时间，但也别忘了抬头看看。" },
+  { id: 40, name: "圣杯五", name_en: "Five of Cups", image: getImageUrl("cups_5.png"), meaning: "失落 · 悲伤 · 遗憾", desc: "打翻了牛奶也没办法挽回。允许自己难过一会儿，但别忘了身后还有两个杯子是立着的。珍惜留下的，依然很美好。" },
+  { id: 41, name: "圣杯六", name_en: "Six of Cups", image: getImageUrl("cups_6.png"), meaning: "回忆 · 纯真 · 怀旧", desc: "一段温暖的往事涌上心头。或者是遇到了像童年玩伴一样真诚的人。简单的快乐最动人，像孩子一样去爱吧。" },
+  { id: 42, name: "圣杯七", name_en: "Seven of Cups", image: getImageUrl("cups_7.png"), meaning: "幻想 · 选择 · 迷茫", desc: "好多选择摆在面前，每个看起来都很诱人。但小心哦，有些只是美丽的泡沫。擦亮眼睛，问问自己到底需要哪一个。" },
+  { id: 43, name: "圣杯八", name_en: "Eight of Cups", image: getImageUrl("cups_8.png"), meaning: "寻找 · 离开 · 追寻", desc: "虽然这里什么都有，但你心里知道这不够。勇敢地转身吧，去寻找那个能真正填满你内心空缺的东西，哪怕路途遥远。" },
+  { id: 44, name: "圣杯九", name_en: "Nine of Cups", image: getImageUrl("cups_9.png"), meaning: "满足 · 愿望 · 享受", desc: "愿望成真了！现在的你就像个满足的猫咪，享受着生活的馈赠。这是属于你的幸福时刻，不需要向任何人解释。" },
+  { id: 45, name: "圣杯十", name_en: "Ten of Cups", image: getImageUrl("cups_10.png"), meaning: "幸福 · 家庭 · 圆满", desc: "彩虹挂在天边，家人朋友环绕在侧。这就是完美的幸福画面。珍惜这份稳稳的爱，它就是你最坚强的后盾。" },
+  { id: 46, name: "圣杯侍从", name_en: "Page of Cups", image: getImageUrl("cups_page.png"), meaning: "好奇 · 创意 · 消息", desc: "也许会收到一封情书，或者突然有了一个浪漫的点子。保持敏感和好奇，你的直觉现在准得惊人。" },
+  { id: 47, name: "圣杯骑士", name_en: "Knight of Cups", image: getImageUrl("cups_knight.png"), meaning: "浪漫 · 邀请 · 追求", desc: "白马王子（或公主）带着爱意走来了。这是一个追求梦想和爱情的好时机，听从内心的声音，温柔地前进。" },
+  { id: 48, name: "圣杯王后", name_en: "Queen of Cups", image: getImageUrl("cups_queen.png"), meaning: "慈悲 · 倾听 · 直觉", desc: "你像大海一样包容。倾听内心的声音，也去关怀身边的人。你的温柔具有治愈一切的力量，相信你的直觉。" },
+  { id: 49, name: "圣杯国王", name_en: "King of Cups", image: getImageUrl("cups_king.png"), meaning: "宽容 · 平衡 · 掌控", desc: "即使内心波涛汹涌，表面依然平静如水。你学会了如何与情绪共处，用成熟和宽容去处理一切，你是情感的主人。" }
+];
+
+// 宝剑组 (Swords) - 风元素：理智、思想、冲突
+const SWORDS_DECK: TarotCard[] = [
+  { id: 50, name: "宝剑王牌", name_en: "Ace of Swords", image: getImageUrl("swords_ace.png"), meaning: "清晰 · 真相 · 决断", desc: "思维突然变得清晰无比！挥剑斩断乱麻，这是做出理智决定的好时机。真理掌握在你手中，勇敢地面对它。" },
+  { id: 51, name: "宝剑二", name_en: "Two of Swords", image: getImageUrl("swords_2.png"), meaning: "僵局 · 逃避 · 平衡", desc: "蒙上眼睛并不代表问题不存在。你在逃避做一个决定，因为怕打破平衡。但只有摘下眼罩，才能看清出路。" },
+  { id: 52, name: "宝剑三", name_en: "Three of Swords", image: getImageUrl("swords_3.png"), meaning: "心碎 · 悲伤 · 释放", desc: "心痛是真实的，不要假装没事。下雨天也没关系，痛快地哭一场吧。眼泪会冲刷掉伤口，痊愈从承认痛苦开始。" },
+  { id: 53, name: "宝剑四", name_en: "Four of Swords", image: getImageUrl("swords_4.png"), meaning: "休息 · 恢复 · 沉思", desc: "你太累了，脑子需要关机重启。找个安静的角落躺一会儿，什么都别想。现在的停顿，是为了接下来能走得更远。" },
+  { id: 54, name: "宝剑五", name_en: "Five of Swords", image: getImageUrl("swords_5.png"), meaning: "争执 · 胜利 · 代价", desc: "虽然赢了争吵，但可能输了感情。这种胜利真的值得吗？有时候，退一步海阔天空，放下胜负心，你会更轻松。" },
+  { id: 55, name: "宝剑六", name_en: "Six of Swords", image: getImageUrl("swords_6.png"), meaning: "过渡 · 疗愈 · 前行", desc: "最艰难的时刻已经过去了。虽然心情还有点沉重，但船正在驶向平静的水域。带上你的经验，继续前行吧。" },
+  { id: 56, name: "宝剑七", name_en: "Seven of Swords", image: getImageUrl("swords_7.png"), meaning: "策略 · 隐秘 · 孤胆", desc: "有时候不能硬碰硬，需要一点小聪明。也许你想独自解决问题，但要小心，别聪明反被聪明误，诚实面对自己。" },
+  { id: 57, name: "宝剑八", name_en: "Eight of Swords", image: getImageUrl("swords_8.png"), meaning: "束缚 · 限制 · 恐慌", desc: "你觉得自己被困住了，但看看周围，那些剑并没有把你围死。限制往往来自内部的恐惧，睁开眼，你其实可以走出来的。" },
+  { id: 58, name: "宝剑九", name_en: "Nine of Swords", image: getImageUrl("swords_9.png"), meaning: "焦虑 · 噩梦 · 压力", desc: "深夜的焦虑最折磨人。那些脑海里的怪物其实没那么可怕。天亮之后，你会发现一切都只是影子。深呼吸，试着睡个好觉。" },
+  { id: 59, name: "宝剑十", name_en: "Ten of Swords", image: getImageUrl("swords_10.png"), meaning: "结束 · 痛苦 · 黎明", desc: "已经不能更坏了，这反而是一种解脱。最黑暗的时刻意味着黎明即将来临。所有的痛苦都结束了，准备迎接新生吧。" },
+  { id: 60, name: "宝剑侍从", name_en: "Page of Swords", image: getImageUrl("swords_page.png"), meaning: "机智 · 观察 · 谨慎", desc: "你现在思维敏捷，像个侦探一样观察周围。这种警觉很好，但也别太紧绷了。保持好奇心，小心求证。" },
+  { id: 61, name: "宝剑骑士", name_en: "Knight of Swords", image: getImageUrl("swords_knight.png"), meaning: "急躁 · 直接 · 锋利", desc: "你说话直来直去，行动如风。这很有效率，但也要注意别误伤了别人。慢一点点，把你的锐气用在解决问题上。" },
+  { id: 62, name: "宝剑王后", name_en: "Queen of Swords", image: getImageUrl("swords_queen.png"), meaning: "独立 · 敏锐 · 坦率", desc: "你不需要依赖任何人，你的头脑就是最强的武器。保持清醒和理智，切断那些不再适合你的人际关系，做自己的女王。" },
+  { id: 63, name: "宝剑国王", name_en: "King of Swords", image: getImageUrl("swords_king.png"), meaning: "权威 · 理智 · 公正", desc: "用理智去判断，而不是用感情。你现在需要像法官一样公正地看待问题。清晰的逻辑会带你找到最正确的答案。" }
+];
+
+export const TAROT_DECK: TarotCard[] = [...MAJOR_ARCANA, ...WANDS_DECK, ...CUPS_DECK, ...SWORDS_DECK, ...PENTACLES_DECK];

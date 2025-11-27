@@ -8,6 +8,8 @@ import { common } from '@kit.AbilityKit';
 const PREF_NAME = 'healing_book_pref';
 const KEY_LAST_DATE = 'last_draw_date';
 const KEY_TODAY_CARD_ID = 'today_card_id';
+const KEY_TODAY_RARITY_LEVEL = 'today_rarity_level'; // 新增：保存今日稀有度等级
+const KEY_TODAY_RARITY_COLOR = 'today_rarity_color'; // 新增：保存今日稀有度颜色
 const KEY_IS_VIP = 'is_vip_user';
 
 const KEY_HISTORY = 'user_history_v1';
@@ -25,6 +27,7 @@ export interface CardRecord {
   timestamp: number;
   cardId: number;
   rarityColor: string;
+  rarityLevel?: number; // 新增：保存稀有度等级
   moodIndex?: number;
   moodNote?: string;
 }
@@ -37,6 +40,13 @@ export interface MoodToday {
 export interface AffirmationsToday {
   quote: string;
   task: string;
+}
+
+// 🌟 新增：定义今日卡牌状态接口，避免使用对象字面量类型
+export interface DailyCardState {
+  card: TarotCard;
+  rarityLevel: number;
+  rarityColor: string;
 }
 
 export class FortuneManager {
@@ -62,7 +72,7 @@ export class FortuneManager {
   }
 
   // --- 基础抽牌逻辑 ---
-  public async checkTodayCard(): Promise<TarotCard | null> {
+  public async checkTodayCard(): Promise<DailyCardState | null> {
     if (!this.pref) return null;
     const todayStr = new Date().toDateString();
     const savedDate = await this.pref.get(KEY_LAST_DATE, '');
@@ -70,7 +80,15 @@ export class FortuneManager {
     if (savedDate === todayStr) {
       const cardId = await this.pref.get(KEY_TODAY_CARD_ID, -1) as number;
       if (cardId >= 0 && cardId < TAROT_DECK.length) {
-        return TAROT_DECK[cardId];
+        // 尝试恢复稀有度，如果没有则默认为 N (Level 1)
+        const rarityLevel = await this.pref.get(KEY_TODAY_RARITY_LEVEL, 1) as number;
+        const rarityColor = await this.pref.get(KEY_TODAY_RARITY_COLOR, 'rgba(200, 200, 200, 0.5)') as string;
+        
+        return { 
+          card: TAROT_DECK[cardId],
+          rarityLevel: rarityLevel,
+          rarityColor: rarityColor
+        };
       }
     }
     return null;
@@ -94,10 +112,10 @@ export class FortuneManager {
     return shuffled.slice(0, 3);
   }
 
-  public async addHistory(card: TarotCard, rarityColor: string) {
+  public async addHistory(card: TarotCard, rarityColor: string, rarityLevel: number = 1) {
     if (!this.pref) return;
     const history = await this.safeGetRecords(KEY_HISTORY);
-    history.unshift({ timestamp: new Date().getTime(), cardId: card.id, rarityColor: rarityColor });
+    history.unshift({ timestamp: new Date().getTime(), cardId: card.id, rarityColor: rarityColor, rarityLevel: rarityLevel });
     if (history.length > 50) history.pop();
     await this.pref.put(KEY_HISTORY, JSON.stringify(history));
     await this.pref.flush();
@@ -108,13 +126,13 @@ export class FortuneManager {
     return await this.safeGetRecords(KEY_HISTORY);
   }
 
-  public async toggleFavorite(card: TarotCard, rarityColor: string): Promise<boolean> {
+  public async toggleFavorite(card: TarotCard, rarityColor: string, rarityLevel: number = 1): Promise<boolean> {
     if (!this.pref) return false;
     let favs = await this.safeGetRecords(KEY_FAVORITES);
     const index = favs.findIndex(item => item.cardId === card.id);
     let isAdded = false;
     if (index >= 0) { favs.splice(index, 1); isAdded = false; }
-    else { favs.unshift({ timestamp: new Date().getTime(), cardId: card.id, rarityColor: rarityColor }); isAdded = true; }
+    else { favs.unshift({ timestamp: new Date().getTime(), cardId: card.id, rarityColor: rarityColor, rarityLevel: rarityLevel }); isAdded = true; }
     await this.pref.put(KEY_FAVORITES, JSON.stringify(favs));
     await this.pref.flush();
     return isAdded;
@@ -137,8 +155,15 @@ export class FortuneManager {
     return ids.filter((element, index, self) => self.indexOf(element) === index);
   }
 
-  public async saveDrawResult(card: TarotCard, rarityColor: string): Promise<void> {
-    await this.addHistory(card, rarityColor);
+  public async saveDrawResult(card: TarotCard, rarityColor: string, rarityLevel: number = 1): Promise<void> {
+    await this.addHistory(card, rarityColor, rarityLevel);
+    
+    // 补充：保存今日稀有度信息
+    if (this.pref) {
+        await this.pref.put(KEY_TODAY_RARITY_LEVEL, rarityLevel);
+        await this.pref.put(KEY_TODAY_RARITY_COLOR, rarityColor);
+        await this.pref.flush();
+    }
   }
 
   public async getGallery(): Promise<CardRecord[]> {
@@ -308,7 +333,7 @@ export class FortuneManager {
     const data: Record<string, Object> = {};
 
     // 导出所有 Key
-    const keys = [KEY_HISTORY, KEY_FAVORITES, KEY_MOOD_STREAK, KEY_IS_VIP, KEY_MOOD_TODAY, KEY_MOOD_NOTE];
+    const keys = [KEY_HISTORY, KEY_FAVORITES, KEY_MOOD_STREAK, KEY_IS_VIP, KEY_MOOD_TODAY, KEY_MOOD_NOTE, KEY_LAST_DATE, KEY_TODAY_CARD_ID, KEY_TODAY_RARITY_LEVEL, KEY_TODAY_RARITY_COLOR];
     for (const key of keys) {
       data[key] = await this.pref.get(key, '');
     }
