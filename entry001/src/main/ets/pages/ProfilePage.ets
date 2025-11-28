@@ -17,7 +17,6 @@ struct ProfilePage {
   @State selectedDate: Date = new Date('1995-01-01');
   // 用于展示的字符串
   @State birthDateText: string = '未设置';
-  @State isPrivacyMode: boolean = false;
 
   private userManager = UserManager.getInstance();
   private energyManager = EnergyManager.getInstance();
@@ -25,7 +24,6 @@ struct ProfilePage {
 
   async aboutToAppear(): Promise<void> {
     this.refreshData();
-    this.isPrivacyMode = await this.fortuneManager.isPrivacyMode();
   }
 
   onPageShow(): void {
@@ -59,29 +57,6 @@ struct ProfilePage {
     });
   }
 
-  async togglePrivacy(isOn: boolean): Promise<void> {
-    this.isPrivacyMode = isOn;
-    await this.fortuneManager.setPrivacyMode(isOn);
-    promptAction.showToast({ message: isOn ? '🔒 隐私模式已开启' : '🔓 隐私模式已关闭' });
-  }
-
-  handleLogout(): void {
-    promptAction.showDialog({
-      title: '退出登录',
-      message: '确定要退出当前账号吗？',
-      buttons: [
-        { text: '取消', color: '#999999' },
-        { text: '退出', color: '#FF0000' }
-      ]
-    }, (err, data) => {
-      if (data.index === 1) {
-        this.userManager.logout();
-        this.currentUser = null;
-        promptAction.showToast({ message: '已退出' });
-        this.refreshData();
-      }
-    });
-  }
 
   // 🟢 修复1：完善登录逻辑与反馈
   async handleLogin(): Promise<void> {
@@ -223,50 +198,20 @@ struct ProfilePage {
 
           // 3. 功能列表
           Column() {
-            Text('个人资料').fontSize(14).fontColor('#888').margin({ left: 8, bottom: 8 })
-
-            // 🟢 修复：点击弹出 DatePicker 选择器
-            this.InfoItem('🎂', '出生年月', this.birthDateText, () => this.handleEditBirth())
+            if (this.currentUser) {
+              Text('个人资料').fontSize(14).fontColor('#888').margin({ left: 8, bottom: 8 })
+              // 🟢 修复：点击弹出 DatePicker 选择器
+              this.InfoItem('🎂', '出生年月', this.birthDateText, () => this.handleEditBirth())
+            }
 
             Text('更多服务').fontSize(14).fontColor('#888').margin({ left: 8, top: 20, bottom: 8 })
             this.InfoItem('📖', '关于我们', '', () => promptAction.showToast({ message: '关于我们：治愈系塔罗 v1.0' }))
-            this.InfoItem('📄', '用户协议', '', () => promptAction.showToast({ message: '用户协议已阅读' }))
-            this.InfoItem('🛡️', '隐私政策', '', () => promptAction.showToast({ message: '隐私政策已了解' }))
+            this.InfoItem('📄', '用户协议', '', () => router.pushUrl({ url: 'pages/UserAgreementPage' }))
+            this.InfoItem('🛡️', '隐私政策', '', () => router.pushUrl({ url: 'pages/PrivacyPolicyPage' }))
             this.InfoItem('🎧', '联系客服', '', () => promptAction.showToast({ message: '客服将会尽快联系您' }))
             this.InfoItem('💪', '常见鼓励', '', () => promptAction.showToast({ message: '相信自己，未来可期！' }))
             this.InfoItem('⭐', '五星鼓励', '', () => promptAction.showToast({ message: '感谢您的五星好评！' }))
-            this.InfoItem('⚙️', '设置', '', () => promptAction.showToast({ message: '设置功能开发中...' }))
-
-            // 隐私模式开关
-            Text('隐私设置').fontSize(14).fontColor('#888').margin({ left: 8, top: 20, bottom: 8 })
-            Row() {
-              Row() {
-                Text('🔒').fontSize(20).margin({ right: 12 })
-                Column() {
-                  Text('隐私保护模式').fontSize(16).fontColor('#333')
-                  Text('隐藏首页文字和分享内容').fontSize(12).fontColor('#AAA').margin({ top: 2 })
-                }.alignItems(HorizontalAlign.Start)
-              }
-              Toggle({ type: ToggleType.Switch, isOn: this.isPrivacyMode })
-                .selectedColor('#FF69B4')
-                .onChange((isOn: boolean) => this.togglePrivacy(isOn))
-            }
-            .width('100%')
-            .padding(20)
-            .backgroundColor(Color.White)
-            .borderRadius(16)
-            .margin({ bottom: 12 })
-
-            if (this.currentUser) {
-              Button('退出登录')
-                .backgroundColor('#FFF0F5')
-                .fontColor('#FF69B4')
-                .width('100%')
-                .height(50)
-                .borderRadius(16)
-                .margin({ top: 20 })
-                .onClick(() => this.handleLogout())
-            }
+            this.InfoItem('⚙️', '设置', '', () => router.pushUrl({ url: 'pages/SettingsPage' }))
           }
           .padding(20)
           .width('100%')

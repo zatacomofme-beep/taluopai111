@@ -5,6 +5,9 @@
     "pages/ProfilePage",
     "pages/SharePreviewPage",
     "pages/DeepAnalysisResultPage",
-    "pages/AIChatPage"
+    "pages/AIChatPage",
+    "pages/UserAgreementPage",
+    "pages/PrivacyPolicyPage",
+    "pages/SettingsPage"
   ]
 }

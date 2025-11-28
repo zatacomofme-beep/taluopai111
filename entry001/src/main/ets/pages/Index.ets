@@ -806,13 +806,24 @@ struct Index {
                     .borderRadius({ topLeft: 8, bottomRight: 8 })
                     .position({ x: 0, y: 0 })
                 }
+                
                 Text(card.name).fontSize(12).fontColor('#333').fontWeight(FontWeight.Medium).margin({ top: 8 })
               } else {
-                Stack() {
-                  Rect().width('100%').height('100%').fill('#F7F8FA').borderRadius(10).strokeWidth(1).stroke('#F0F0F0')
-                  Column({space: 4}) { Text("🔒").fontSize(18).fontColor('#DDD'); Text("???").fontSize(10).fontColor('#EEE') }
-                }.width('100%').aspectRatio(2/3)
-                Text("待解锁").fontSize(12).fontColor('#EEE').margin({ top: 8 })
+                Column() {
+                  Stack() {
+                    Rect().width('100%').height('100%').fill('#F7F8FA').borderRadius(10).strokeWidth(1).stroke('#F0F0F0')
+                    Column({space: 4}) { 
+                      Text("🔒").fontSize(18).fontColor('#DDD')
+                      Text("???").fontSize(10).fontColor('#EEE') 
+                    }
+                    .alignItems(HorizontalAlign.Center)
+                    .justifyContent(FlexAlign.Center)
+                    .width('100%').height('100%')
+                  }
+                  .width('100%').aspectRatio(2/3)
+
+                  Text("待解锁").fontSize(12).fontColor('#EEE').margin({ top: 8 })
+                }
               }
             }
           }
@@ -877,23 +888,17 @@ struct Index {
           Row() {
             // 左侧显示用户头像或登录提示
             Row() {
-              if (this.currentUserInfo && this.currentUserInfo.avatar) {
-                // 头像使用 getCardImageSource 兼容本地/网络
-                Image(this.getCardImageSource(this.currentUserInfo.avatar))
-                  .width(32).height(32).borderRadius(16).margin({ right: 8 })
+              if (this.currentUserInfo) {
+                // 已登录：显示头像
+                Image(this.currentUserInfo.avatar ? this.getCardImageSource(this.currentUserInfo.avatar) : $r('app.media.startIcon'))
+                  .width(32).height(32).borderRadius(16)
                   .alt($r('app.media.startIcon'))
               } else {
-                // 未登录显示默认图标
-                Text('👤').fontSize(24).margin({ right: 8 })
-              }
-
-              if (this.currentUserInfo) {
-                Text(this.currentUserInfo.nickname || '用户')
-                  .fontSize(14).fontColor('#555').fontWeight(FontWeight.Medium)
-              } else {
-                Text('登录').fontSize(14).fontColor('#666')
+                // 未登录：显示文字
+                Text('未登录').fontSize(14).fontColor('#666').fontWeight(FontWeight.Medium)
               }
             }
+            
             .backgroundColor('rgba(255,255,255,0.85)')
             .backdropBlur(10)
             .padding({ left: 8, right: 12, top: 6, bottom: 6 })
@@ -903,25 +908,22 @@ struct Index {
 
             Blank()
 
-            // 云同步入口
-            Button({ type: ButtonType.Circle }) { Text('☁️').fontSize(16) }
-            .width(36).height(36)
-            .backgroundColor('rgba(255,255,255,0.85)')
-            .backdropBlur(10)
-            .shadow({ radius: 10, color: 'rgba(0,0,0,0.05)', offsetY: 2 })
-            .margin({ right: 12 })
-            .onClick(() => {
-              // 点击时手动触发一次同步检查
-              promptAction.showToast({ message: '正在同步云端数据...', duration: 1500 });
-              CloudService.autoSave();
-              void (async () => {
-                const restored = await CloudService.autoRestore();
-                if(restored) {
-                  this.checkState();
-                  promptAction.showToast({ message: '✅ 同步完成' });
-                }
-              })();
-            })
+
+            
+            
+            
+            
+
+              
+
+
+
+
+
+
+
+
+
 
             Row() {
               Text('⚡').fontSize(14)
