@@ -228,11 +228,17 @@ struct ProfilePage {
             // 🟢 修复：点击弹出 DatePicker 选择器
             this.InfoItem('🎂', '出生年月', this.birthDateText, () => this.handleEditBirth())
 
-            // 🟢 修复3：已移除“数据云同步”按钮
-
-            Text('设置').fontSize(14).fontColor('#888').margin({ left: 8, top: 12, bottom: 8 })
+            Text('更多服务').fontSize(14).fontColor('#888').margin({ left: 8, top: 20, bottom: 8 })
+            this.InfoItem('📖', '关于我们', '', () => promptAction.showToast({ message: '关于我们：治愈系塔罗 v1.0' }))
+            this.InfoItem('📄', '用户协议', '', () => promptAction.showToast({ message: '用户协议已阅读' }))
+            this.InfoItem('🛡️', '隐私政策', '', () => promptAction.showToast({ message: '隐私政策已了解' }))
+            this.InfoItem('🎧', '联系客服', '', () => promptAction.showToast({ message: '客服将会尽快联系您' }))
+            this.InfoItem('💪', '常见鼓励', '', () => promptAction.showToast({ message: '相信自己，未来可期！' }))
+            this.InfoItem('⭐', '五星鼓励', '', () => promptAction.showToast({ message: '感谢您的五星好评！' }))
+            this.InfoItem('⚙️', '设置', '', () => promptAction.showToast({ message: '设置功能开发中...' }))
 
             // 隐私模式开关
+            Text('隐私设置').fontSize(14).fontColor('#888').margin({ left: 8, top: 20, bottom: 8 })
             Row() {
               Row() {
                 Text('🔒').fontSize(20).margin({ right: 12 })

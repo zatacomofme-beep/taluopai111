@@ -2,9 +2,9 @@
   "src": [
     "pages/Index",
     "pages/SpreadPage",
-    "pages/BreathingPage",
-    "pages/MoodPage",
     "pages/ProfilePage",
-    "pages/SharePreviewPage"
+    "pages/SharePreviewPage",
+    "pages/DeepAnalysisResultPage",
+    "pages/AIChatPage"
   ]
 }

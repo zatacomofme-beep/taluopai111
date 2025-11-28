@@ -2,7 +2,7 @@ import { router } from '@kit.ArkUI';
 
 @Component
 export struct BottomNavBar {
-  @Prop current: string = 'index'; // index | breathing | mood | profile
+  @Prop current: string = 'index'; // index | chat | profile
 
   @Builder
   NavItem(key: string, icon: string, label: string, targetUrl: string) {
@@ -51,9 +51,8 @@ export struct BottomNavBar {
   build() {
     Row() {
       this.NavItem('index', '🔮', '指引', 'pages/Index')
-      this.NavItem('breathing', '🌬️', '呼吸', 'pages/BreathingPage')
-      this.NavItem('mood', '📝', '日记', 'pages/MoodPage')
-      // 新增：个人中心入口
+      this.NavItem('spread', '🃏', '解读', 'pages/SpreadPage')
+      this.NavItem('chat', '💬', '对话', 'pages/AIChatPage')
       this.NavItem('profile', '👤', '我的', 'pages/ProfilePage')
     }
     .width('90%')

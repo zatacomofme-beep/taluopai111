@@ -824,7 +824,23 @@ struct Index {
 
   @Builder EnergySheetBuilder() {
     Column() {
-      Row().width(40).height(5).backgroundColor('#E0E0E0').borderRadius(10).margin({ top: 10, bottom: 20 })
+      // 顶部关闭按钮区域
+      Row() {
+        Blank()
+        Button({ type: ButtonType.Circle, stateEffect: true }) {
+          Text('×').fontSize(24).fontColor('#999')
+        }
+        .width(32)
+        .height(32)
+        .backgroundColor('#F5F5F5')
+        .onClick(() => {
+          this.isEnergySheetOpen = false;
+        })
+      }
+      .width('100%')
+      .padding({ right: 16, top: 16 })
+
+      Row().width(40).height(5).backgroundColor('#E0E0E0').borderRadius(10).margin({ bottom: 20 })
       Text("⚡ 心力加油站").fontSize(20).fontWeight(FontWeight.Bold).fontColor('#333').margin({ bottom: 8 })
       Text(`当前剩余: ${this.currentEnergy}`).fontSize(14).fontColor('#999').margin({ bottom: 30 })
 
@@ -1042,58 +1058,47 @@ struct Index {
                 .stateStyles({ pressed: { .scale({ x: 0.98, y: 0.98 }) }, normal: { .scale({ x: 1, y: 1 }) } })
                 .onClick(() => router.pushUrl({ url: 'pages/SpreadPage' }))
 
-              // 2. 次要操作：分享 & 记录 (并排，轻量化)
+              // 2. 次要操作：分享、充能、换牌 (三等分)
               Row({ space: 12 }) {
-                Button("✨ 分享")
-                  .backgroundColor('#F5F7FA')
-                  .fontColor('#555')
-                  .height(48)
-                  .layoutWeight(1)
-                  .borderRadius(24)
-                  .stateStyles({ pressed: { .scale({ x: 0.96, y: 0.96 }) }, normal: { .scale({ x: 1, y: 1 }) } })
-                  .onClick(() => this.handleShare())
-
-                if (this.moodIndex === -1) {
-                  Button("📝 记录心情")
-                    .backgroundColor('#FFF0F5')
-                    .fontColor('#DB7093') // 苍紫罗兰色
-                    .height(48)
-                    .layoutWeight(1)
-                    .borderRadius(24)
-                    .stateStyles({ pressed: { .scale({ x: 0.96, y: 0.96 }) }, normal: { .scale({ x: 1, y: 1 }) } })
-                    .onClick(() => router.pushUrl({ url: 'pages/MoodPage' }))
-                } else {
-                  // 如果已记录，显示查看按钮或占位
-                  Button("✅ 已记录")
-                    .backgroundColor('#F0FFF0')
-                    .fontColor('#3CB371')
-                    .height(48)
-                    .layoutWeight(1)
-                    .borderRadius(24)
-                    .stateStyles({ pressed: { .scale({ x: 0.96, y: 0.96 }) }, normal: { .scale({ x: 1, y: 1 }) } })
-                    .onClick(() => router.pushUrl({ url: 'pages/MoodPage' }))
+                // 分享
+                Button() {
+                  Column() {
+                     Text("✨").fontSize(20).margin({ bottom: 4 })
+                     Text("分享").fontSize(12).fontColor('#555')
+                  }
                 }
-              }
-              .width('100%')
-              .margin({ bottom: 20 })
-
-              // 3. 底部功能：补充心力 & 牌组
-              Row() {
-                Row() {
-                  Text("⚡ 补充心力").fontSize(14).fontColor('#AAA').margin({ right: 4 })
-                  Text("获得更多指引").fontSize(12).fontColor('#CCC')
-                }
+                .backgroundColor('#F5F7FA')
                 .layoutWeight(1)
-                .justifyContent(FlexAlign.Center)
-                .onClick(() => this.handleBuyVip())
+                .height(70)
+                .borderRadius(16)
+                .onClick(() => this.handleShare())
 
-                Divider().vertical(true).height(20).color('#DDD').margin({ left: 8, right: 8 })
-
-                Row() {
-                  Text("🎨 更换牌组").fontSize(14).fontColor('#AAA')
+                // 补充心力
+                Button() {
+                  Column() {
+                     Text("⚡").fontSize(20).margin({ bottom: 4 })
+                     Text("补充心力").fontSize(12).fontColor('#555')
+                  }
                 }
+                .backgroundColor('#FFF8E1') // 淡黄
                 .layoutWeight(1)
-                .justifyContent(FlexAlign.Center)
+                .height(70)
+                .borderRadius(16)
+                .onClick(() => {
+                   this.isEnergySheetOpen = true;
+                })
+
+                // 更换牌组
+                Button() {
+                  Column() {
+                     Text("🎴").fontSize(20).margin({ bottom: 4 })
+                     Text("更换牌组").fontSize(12).fontColor('#555')
+                  }
+                }
+                .backgroundColor('#F3E5F5') // 淡紫
+                .layoutWeight(1)
+                .height(70)
+                .borderRadius(16)
                 .onClick(() => {
                    animateTo({ duration: 300, curve: Curve.EaseOut }, () => {
                      this.isDeckSheetOpen = true;
@@ -1101,9 +1106,7 @@ struct Index {
                 })
               }
               .width('100%')
-              .height(40)
-              .backgroundColor('rgba(255,255,255,0.5)')
-              .borderRadius(20)
+              .margin({ bottom: 20 })
             }
             .width('90%').backgroundColor('rgba(255,255,255,0.90)').backdropBlur(40).borderRadius(32).padding({ left: 24, right: 24, top: 32, bottom: 24 })
             .shadow({ radius: 40, color: 'rgba(0, 0, 0, 0.08)', offsetY: 10 })
