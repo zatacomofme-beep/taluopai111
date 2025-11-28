@@ -97,10 +97,18 @@ struct SettingsPage {
     Column() {
       // 标题栏
       Row() {
-        Image($r('app.media.ic_public_back')) // 假设有这个资源，或者用 Text 替代
-          .width(24)
-          .height(24)
-          .onClick(() => router.back())
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          Text('<')
+            .fontSize(24)
+            .fontColor('#333')
+            .fontWeight(FontWeight.Medium)
+        }
+        .width(40)
+        .height(40)
+        .backgroundColor(Color.Transparent)
+        .onClick(() => {
+          router.back();
+        })
         
         Text('设置')
           .fontSize(18)

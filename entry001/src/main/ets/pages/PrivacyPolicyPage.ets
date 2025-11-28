@@ -9,10 +9,11 @@ struct PrivacyPolicyPage {
     Column() {
       // 顶部导航栏
       Row() {
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          Image($r('app.media.startIcon')) // 使用 startIcon 作为返回图标
-            .width(24).height(24)
-            .rotate({ angle: 180 })
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          Text('<')
+            .fontSize(24)
+            .fontColor('#333')
+            .fontWeight(FontWeight.Medium)
         }
         .width(40)
         .height(40)

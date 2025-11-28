@@ -9,10 +9,11 @@ struct UserAgreementPage {
     Column() {
       // 顶部导航栏
       Row() {
-        Button({ type: ButtonType.Circle, stateEffect: true }) {
-          Image($r('app.media.startIcon')) // 临时使用 startIcon 作为返回图标，或者查找是否有 back icon
-            .width(24).height(24)
-            .rotate({ angle: 180 }) // 简单的旋转使其看起来像返回，如果有更好的资源请替换
+        Button({ type: ButtonType.Normal, stateEffect: true }) {
+          Text('<')
+            .fontSize(24)
+            .fontColor('#333')
+            .fontWeight(FontWeight.Medium)
         }
         .width(40)
         .height(40)
