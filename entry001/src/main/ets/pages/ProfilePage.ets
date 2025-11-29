@@ -209,8 +209,8 @@ struct ProfilePage {
             this.InfoItem('📄', '用户协议', '', () => router.pushUrl({ url: 'pages/UserAgreementPage' }))
             this.InfoItem('🛡️', '隐私政策', '', () => router.pushUrl({ url: 'pages/PrivacyPolicyPage' }))
             this.InfoItem('🎧', '联系客服', '', () => promptAction.showToast({ message: '客服将会尽快联系您' }))
-            this.InfoItem('💪', '常见鼓励', '', () => promptAction.showToast({ message: '相信自己，未来可期！' }))
-            this.InfoItem('⭐', '五星鼓励', '', () => promptAction.showToast({ message: '感谢您的五星好评！' }))
+            this.InfoItem('❓', '常见问题', '', () => promptAction.showToast({ message: '常见问题解答' }))
+            this.InfoItem('⭐', '五星好评', '', () => promptAction.showToast({ message: '感谢您的五星好评！' }))
             this.InfoItem('⚙️', '设置', '', () => router.pushUrl({ url: 'pages/SettingsPage' }))
           }
           .padding(20)

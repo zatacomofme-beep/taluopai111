@@ -26,55 +26,98 @@ export class AIService {
   public static readonly COST_PER_CHAT = 2;
   public static readonly COST_DEEP_ANALYSIS = 5;
 
-  static createInitialPrompt(cards: TarotCard[], lastMood?: MoodToday): string {
+  static createInitialPrompt(cards: TarotCard[], lastMood?: MoodToday, spreadType: string = 'time_flow'): string {
     let moodInstruction = "";
-    let openingInstruction = "";
-
+    
     // 场景 1：有心情记录
     if (lastMood && lastMood.mood !== -1) {
       const emojis = ['😭 悲伤', '😕 困惑', '🙂 平静', '😊 开心', '🥳 狂喜'];
       const moodText = emojis[lastMood.mood] || '未知';
       const noteText = lastMood.note ? `备注：“${lastMood.note}”` : '';
+      moodInstruction = `【用户当前状态】：${moodText}。${noteText}。请在解读中予以回应。`;
+    }
 
-      moodInstruction = `【用户当前状态】：${moodText}。${noteText}。`;
-
-      openingInstruction = `
-      1. **开场白（情感共鸣 + 牌面切入）**：
-         - 第一句必须先回应用户的心情。
-         - 紧接着引出对第一张牌的冷读。
-      `;
+    let spreadInfo = "";
+    let formatInstruction = "";
+    
+    if (spreadType === 'time_flow') {
+        spreadInfo = `
+        牌阵：时光流（Past-Present-Future）
+        1. 【过去】：${cards[0]?.name} (${cards[0]?.meaning})
+        2. 【现在】：${cards[1]?.name} (${cards[1]?.meaning})
+        3. 【未来】：${cards[2]?.name} (${cards[2]?.meaning})
+        `;
+        formatInstruction = `
+        请严格按照以下格式输出（不要修改标签）：
+        <<<SECTION_0>>>
+        (针对过去的解读，结合开场白)
+        <<<SECTION_1>>>
+        (针对现在的深度剖析)
+        <<<SECTION_2>>>
+        (针对未来的预测)
+        <<<SECTION_3>>>
+        (综合建议)
+        `;
+    } else if (spreadType === 'celtic_cross') {
+        // 简化版凯尔特十字 (这里只取前10张，假设 cards 长度足够)
+        const positions = [
+            '核心现状', '阻碍/挑战', '潜意识/基础', '过去的影响', 
+            '意识目标/最高愿景', '即将发生的未来', '自我态度', '环境影响', '希望与恐惧', '最终结果'
+        ];
+        spreadInfo = "牌阵：凯尔特十字\n";
+        cards.forEach((c, i) => {
+            if (i < 10) spreadInfo += `${i+1}. 【${positions[i]}】：${c.name} (${c.meaning})\n`;
+        });
+        formatInstruction = `
+        请严格按照以下格式输出 10 个段落 + 1 个总结：
+        <<<SECTION_0>>>
+        (核心现状解读)
+        <<<SECTION_1>>>
+        (阻碍与挑战解读)
+        ...以此类推直到 <<<SECTION_9>>> (最终结果)
+        <<<SECTION_10>>>
+        (综合总结与建议)
+        `;
     } else {
-      // 场景 2：没有心情记录 -> 直接冷读
-      openingInstruction = `
-      1. **开场白（直击重点）**：
-         - 请务必直接以“从‘${cards[0].name}’这张代表过去的牌面来看...”开头。
-      `;
+        // 通用处理
+        spreadInfo = "牌阵：自由牌阵\n";
+        cards.forEach((c, i) => {
+            spreadInfo += `${i+1}. ${c.name} (${c.meaning})\n`;
+        });
+        formatInstruction = `
+        请为每一张牌提供解读段落，格式为：
+        <<<SECTION_0>>>
+        (第1张牌解读)
+        <<<SECTION_1>>>
+        (第2张牌解读)
+        ...
+        <<<SECTION_${cards.length}>>>
+        (总结建议)
+        `;
     }
 
     return `
       ${moodInstruction}
       你是一位经验丰富、直觉敏锐且充满人文关怀的塔罗咨询师。
-
-      牌阵信息：
-      1. 【过去】：${cards[0].name} (${cards[0].meaning})
-      2. 【现在】：${cards[1].name} (${cards[1].meaning})
-      3. 【未来】：${cards[2].name} (${cards[2].meaning})
+      
+      ${spreadInfo}
 
       解读要求：
-      ${openingInstruction}
-      2. **深度剖析**：结合“${cards[1].name}”揭示当下的核心矛盾。
-      3. **具体建议**：基于“${cards[2].name}”，给出1-2条可执行的行动建议。
-      4. **语调**：温暖而坚定。
-
-      字数控制在300字左右。
+      1. 语言温暖而坚定，富有治愈感。
+      2. 结合牌面含义和位置含义进行深度链接。
+      3. 最后必须给出具体可行的建议。
+      
+      ${formatInstruction}
     `;
   }
 
-  static async requestChat(history: ChatMessage[], context: common.UIAbilityContext, isInitialAnalysis: boolean = false): Promise<string> {
+  static async requestChat(history: ChatMessage[], context: common.UIAbilityContext, isInitialAnalysis: boolean = false, isFree: boolean = false): Promise<string> {
     const energyMgr = EnergyManager.getInstance();
+    const fortuneMgr = FortuneManager.getInstance(); // 获取实例用于标记免费次数
     const cost = isInitialAnalysis ? AIService.COST_DEEP_ANALYSIS : AIService.COST_PER_CHAT;
 
-    if (!energyMgr.hasEnough(cost)) {
+    // 如果不是免费且心力不足
+    if (!isFree && !energyMgr.hasEnough(cost)) {
       return `✨ 心力值不足 (${energyMgr.getEnergy()}/${cost})。\n\n请去首页点击闪电图标补充心力。`;
     }
 
@@ -109,7 +152,13 @@ export class AIService {
       );
 
       if (response.responseCode === 200) {
-        await energyMgr.consume(cost);
+        if (!isFree) {
+          await energyMgr.consume(cost);
+        } else if (isInitialAnalysis) {
+           // 如果是免费且是深度分析，标记今日已用
+           await fortuneMgr.markDailyDeepAnalysisUsed();
+        }
+        
         let resultStr = typeof response.result === 'string' ? response.result : JSON.stringify(response.result);
         const result = JSON.parse(resultStr) as AIResponse;
         return result.choices?.[0]?.message?.content || "AI 陷入沉思...";

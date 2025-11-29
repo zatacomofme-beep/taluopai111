@@ -22,6 +22,7 @@ const KEY_DAILY_TASK_TODAY = 'daily_task_today_v1';
 const KEY_PRIVACY_MODE = 'privacy_mode_v1';
 const KEY_MOOD_STREAK = 'mood_streak_v1';
 const KEY_LAST_MOOD_DATE = 'last_mood_date_v1';
+const KEY_LAST_DEEP_ANALYSIS_DATE = 'last_deep_analysis_date_v1';
 
 export interface CardRecord {
   timestamp: number;
@@ -42,11 +43,15 @@ export interface AffirmationsToday {
   task: string;
 }
 
-// 🌟 新增：定义今日卡牌状态接口，避免使用对象字面量类型
+const KEY_TODAY_CARD_IDS = 'today_card_ids_v2';
+const KEY_TODAY_RARITY_LEVELS = 'today_rarity_levels_v2';
+const KEY_TODAY_RARITY_COLORS = 'today_rarity_colors_v2';
+
+// 🌟 新增：定义今日卡牌状态接口，支持多张牌
 export interface DailyCardState {
-  card: TarotCard;
-  rarityLevel: number;
-  rarityColor: string;
+  cards: TarotCard[];
+  rarityLevels: number[];
+  rarityColors: string[];
 }
 
 export class FortuneManager {
@@ -78,33 +83,75 @@ export class FortuneManager {
     const savedDate = await this.pref.get(KEY_LAST_DATE, '');
 
     if (savedDate === todayStr) {
+      // 优先检查 V2 多张牌数据
+      const cardIdsJson = await this.pref.get(KEY_TODAY_CARD_IDS, '[]') as string;
+      let cardIds: number[] = [];
+      try {
+        cardIds = JSON.parse(cardIdsJson);
+      } catch (e) {
+        cardIds = [];
+      }
+
+      if (cardIds.length > 0) {
+         const rarityLevelsJson = await this.pref.get(KEY_TODAY_RARITY_LEVELS, '[]') as string;
+         const rarityColorsJson = await this.pref.get(KEY_TODAY_RARITY_COLORS, '[]') as string;
+         
+         let rarityLevels: number[] = [];
+         let rarityColors: string[] = [];
+         try {
+            rarityLevels = JSON.parse(rarityLevelsJson);
+            rarityColors = JSON.parse(rarityColorsJson);
+         } catch (e) {}
+
+         const cards = cardIds.map(id => TAROT_DECK.find(c => c.id === id) || TAROT_DECK[0]);
+         
+         // 补齐长度
+         while(rarityLevels.length < cards.length) rarityLevels.push(1);
+         while(rarityColors.length < cards.length) rarityColors.push('rgba(200, 200, 200, 0.5)');
+
+         return { cards, rarityLevels, rarityColors };
+      }
+
+      // 兼容旧版本单张牌
       const cardId = await this.pref.get(KEY_TODAY_CARD_ID, -1) as number;
       if (cardId >= 0 && cardId < TAROT_DECK.length) {
-        // 尝试恢复稀有度，如果没有则默认为 N (Level 1)
         const rarityLevel = await this.pref.get(KEY_TODAY_RARITY_LEVEL, 1) as number;
         const rarityColor = await this.pref.get(KEY_TODAY_RARITY_COLOR, 'rgba(200, 200, 200, 0.5)') as string;
         
         return { 
-          card: TAROT_DECK[cardId],
-          rarityLevel: rarityLevel,
-          rarityColor: rarityColor
+          cards: [TAROT_DECK[cardId]],
+          rarityLevels: [rarityLevel],
+          rarityColors: [rarityColor]
         };
       }
     }
     return null;
   }
 
-  public async drawDailyCard(): Promise<TarotCard> {
+  public async drawRandomCard(): Promise<TarotCard> {
     const randomIndex = Math.floor(Math.random() * TAROT_DECK.length);
-    const card = TAROT_DECK[randomIndex];
-
-    if (this.pref) {
-      const todayStr = new Date().toDateString();
-      await this.pref.put(KEY_LAST_DATE, todayStr);
-      await this.pref.put(KEY_TODAY_CARD_ID, card.id);
-      await this.pref.flush();
+    return TAROT_DECK[randomIndex];
+  }
+  
+  // 保存今日抽牌状态（支持增量或覆盖）
+  public async saveTodayState(cards: TarotCard[], rarityLevels: number[], rarityColors: string[]): Promise<void> {
+    if (!this.pref) return;
+    const todayStr = new Date().toDateString();
+    await this.pref.put(KEY_LAST_DATE, todayStr);
+    
+    const cardIds = cards.map(c => c.id);
+    await this.pref.put(KEY_TODAY_CARD_IDS, JSON.stringify(cardIds));
+    await this.pref.put(KEY_TODAY_RARITY_LEVELS, JSON.stringify(rarityLevels));
+    await this.pref.put(KEY_TODAY_RARITY_COLORS, JSON.stringify(rarityColors));
+    
+    // 同时更新旧字段以保持兼容性（存第一张）
+    if (cards.length > 0) {
+        await this.pref.put(KEY_TODAY_CARD_ID, cards[0].id);
+        await this.pref.put(KEY_TODAY_RARITY_LEVEL, rarityLevels[0]);
+        await this.pref.put(KEY_TODAY_RARITY_COLOR, rarityColors[0]);
     }
-    return card;
+    
+    await this.pref.flush();
   }
 
   public drawThreeSpread(): TarotCard[] {
@@ -333,7 +380,11 @@ export class FortuneManager {
     const data: Record<string, Object> = {};
 
     // 导出所有 Key
-    const keys = [KEY_HISTORY, KEY_FAVORITES, KEY_MOOD_STREAK, KEY_IS_VIP, KEY_MOOD_TODAY, KEY_MOOD_NOTE, KEY_LAST_DATE, KEY_TODAY_CARD_ID, KEY_TODAY_RARITY_LEVEL, KEY_TODAY_RARITY_COLOR];
+    const keys = [
+      KEY_HISTORY, KEY_FAVORITES, KEY_MOOD_STREAK, KEY_IS_VIP, KEY_MOOD_TODAY, KEY_MOOD_NOTE, 
+      KEY_LAST_DATE, KEY_TODAY_CARD_ID, KEY_TODAY_RARITY_LEVEL, KEY_TODAY_RARITY_COLOR,
+      KEY_TODAY_CARD_IDS, KEY_TODAY_RARITY_LEVELS, KEY_TODAY_RARITY_COLORS
+    ];
     for (const key of keys) {
       data[key] = await this.pref.get(key, '');
     }
@@ -357,5 +408,20 @@ export class FortuneManager {
     } catch (e) {
       return false;
     }
+  }
+
+  // --- 新增：每日免费深度解读逻辑 ---
+  public async isDailyDeepAnalysisFree(): Promise<boolean> {
+    if (!this.pref) return true; // 默认免费（如果出错）
+    const todayStr = new Date().toDateString();
+    const lastDate = await this.pref.get(KEY_LAST_DEEP_ANALYSIS_DATE, '') as string;
+    return lastDate !== todayStr;
+  }
+
+  public async markDailyDeepAnalysisUsed(): Promise<void> {
+    if (!this.pref) return;
+    const todayStr = new Date().toDateString();
+    await this.pref.put(KEY_LAST_DEEP_ANALYSIS_DATE, todayStr);
+    await this.pref.flush();
   }
 }
